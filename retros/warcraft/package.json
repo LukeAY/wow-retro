@@ -1,0 +1,14 @@
+{
+  "name": "wow-retro-loot-council",
+  "version": "1.0.0",
+  "description": "A World of Warcraft themed retro tool with Need/Greed/Pass loot rolling, local and networked (per-laptop) modes.",
+  "type": "module",
+  "scripts": {
+    "start": "node server/server.js",
+    "dev": "node --watch server/server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "ws": "^8.18.0"
+  }
+}
