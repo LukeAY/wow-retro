@@ -9,15 +9,15 @@
 <body>
   <div class="topbar">
     <div class="brand">
-      <span class="brand-mark">&#9876;</span>
+      <span class="brand-mark"><span data-icon="swords"></span></span>
       <h1>Loot Council</h1>
       <span class="brand-sub">World of Warcraft Retro</span>
     </div>
     <div class="topbar-actions">
       <button id="btn-config" class="btn btn-ghost">Loot Table</button>
       <button id="btn-roster" class="btn btn-ghost">Party</button>
-      <button id="btn-export" class="btn btn-ghost">Export Tasks</button>
-      <button id="btn-reset" class="btn btn-ghost btn-danger">Reset</button>
+      <button id="btn-export" class="btn btn-ghost" title="Copy the action items as markdown">Loot Ledger</button>
+      <button id="btn-reset" class="btn btn-ghost btn-danger" title="Reset everything">Disband Group</button>
     </div>
   </div>
 
@@ -27,8 +27,8 @@
       <div class="stage-head">
         <h2>Boss Encounter</h2>
         <div class="stage-controls">
-          <button id="btn-pull-boss" class="btn btn-gold">&#128128; Pull a Boss</button>
-          <button id="btn-drop-random" class="btn btn-ghost hidden">&#128142; Drop from Backlog</button>
+          <button id="btn-pull-boss" class="btn btn-primary"><span data-icon="skull"></span> Pull a Boss</button>
+          <button id="btn-drop-random" class="btn btn-ghost hidden"><span data-icon="gem"></span> Drop from Backlog</button>
           <button id="btn-drop-manual" class="btn btn-ghost hidden">Pick from Backlog</button>
           <button id="btn-end-boss" class="btn btn-ghost btn-danger hidden">End Encounter</button>
         </div>
@@ -40,7 +40,7 @@
       <!-- Inline remediation-step composer: author a fix as the discussion
            produces it. Only shown while a boss is up. -->
       <div id="remediation-composer" class="remediation-composer hidden">
-        <div class="rc-head">&#9876; Propose a remediation step for this problem</div>
+        <div class="rc-head"><span data-icon="swords"></span> Call a strategy &mdash; propose a remediation step for this fight</div>
         <div class="add-form">
           <input id="rc-name" type="text" placeholder="e.g. Add a retry around the flaky network call" />
           <select id="rc-rarity" title="How much this step matters (priority)">
@@ -52,18 +52,18 @@
             <option value="legendary">Legendary (top)</option>
           </select>
           <input id="rc-desc" type="text" placeholder="Detail (optional)" />
-          <button id="btn-drop-step" class="btn btn-gold">Propose &amp; Drop Step</button>
+          <button id="btn-drop-step" class="btn btn-primary">Propose &amp; Drop Step</button>
         </div>
         <p class="rc-hint muted">On the shared screen, this drops the step straight onto the table for Need / Greed / Pass and records it on this boss's remediation plan.</p>
       </div>
 
       <div id="active-drop" class="active-drop empty">
-        <p class="empty-hint">No boss pulled. Pull a boss (a retro topic) to start the encounter.</p>
+        <p class="empty-hint">The dungeon is quiet. Pull a boss &mdash; a problem worth tackling &mdash; to begin.</p>
       </div>
 
       <div id="resolve-bar" class="resolve-bar hidden">
         <div id="vote-tally" class="vote-tally"></div>
-        <button id="btn-resolve" class="btn btn-gold">Roll &amp; Resolve</button>
+        <button id="btn-resolve" class="btn btn-primary">Roll &amp; Resolve</button>
       </div>
 
       <div id="result-banner" class="result-banner hidden"></div>
@@ -108,7 +108,7 @@
           <option value="legendary">Legendary (top)</option>
         </select>
         <input id="loot-desc" type="text" placeholder="Description (optional)" />
-        <button id="btn-add-loot" class="btn btn-gold">Add</button>
+        <button id="btn-add-loot" class="btn btn-primary">Add</button>
       </div>
     </div>
   </div>
@@ -125,7 +125,7 @@
       <div class="add-form">
         <input id="member-name" type="text" placeholder="Member name" />
         <select id="member-class"></select>
-        <button id="btn-add-member" class="btn btn-gold">Add</button>
+        <button id="btn-add-member" class="btn btn-primary">Add</button>
       </div>
     </div>
   </div>
@@ -162,7 +162,7 @@
         <option value="raid">Raid boss &mdash; big systemic issue (4 drops to kill)</option>
       </select>
       <div style="margin-top:20px;">
-        <button id="btn-confirm-boss" class="btn btn-gold">Pull Boss</button>
+        <button id="btn-confirm-boss" class="btn btn-primary">Pull Boss</button>
       </div>
     </div>
   </div>
@@ -170,6 +170,7 @@
   <!-- WoW-style loot toast stack -->
   <div id="toast-stack" class="toast-stack"></div>
 
+  <script src="icons.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

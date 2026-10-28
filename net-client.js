@@ -42,8 +42,8 @@ const CLASSES = {
   "Warlock": "#8788ee", "Warrior": "#c69b6d",
 };
 
-// Faction crest emoji (simple, dependency-free).
-const FACTION_CREST = { Alliance: "&#128737;", Horde: "&#9876;" }; // 🛡️ / ⚔️
+// Faction crests (icons come from icons.js).
+const FACTION_CREST = { Alliance: icon("shield"), Horde: icon("swords") };
 
 // Race/class matrix + faction map — populated from the server's `meta` message
 // so the client never diverges from the authoritative WoW: Forever rules.
@@ -181,7 +181,7 @@ function renderRacePicker() {
       btn.className = "race-option" + (race === chosenRace ? " active" : "");
       btn.dataset.race = race;
       btn.style.setProperty("--faction-color", color);
-      btn.innerHTML = `<span class="dot"></span><span>${race}</span>`;
+      btn.innerHTML = `${raceIcon(race) || `<span class="dot"></span>`}<span>${race}</span>`;
       row.appendChild(btn);
     });
     group.appendChild(row);
@@ -288,7 +288,7 @@ function renderAccountability() {
     // character hint only when the owner key is a real name distinct from character
     const charHint = (r.key !== r.character) ? ` <span class="acc-char">as ${escapeHtml(r.character)}</span>` : "";
     li.innerHTML = `
-      <span class="acc-name">&#128100; ${escapeHtml(r.key)}${charHint}</span>
+      <span class="acc-name">${icon("person")} ${escapeHtml(r.key)}${charHint}</span>
       <span class="acc-counts">
         <span class="acc-open" title="Open tasks">${r.open} open</span>
         <span class="acc-done" title="Completed tasks">${r.done} done</span>
@@ -327,7 +327,7 @@ function renderBoss() {
   el.style.setProperty("--boss-color", tier.color);
   el.innerHTML = `
     <div class="boss-head">
-      <div class="boss-name"><span class="skull">${boss.slain ? "&#9876;" : "&#128128;"}</span>${escapeHtml(boss.name)}</div>
+      <div class="boss-name"><span class="skull">${boss.slain ? icon("swords") : icon("skull")}</span>${escapeHtml(boss.name)}</div>
       <div class="boss-tier">${tier.label}</div>
     </div>
     ${boss.desc ? `<div class="boss-desc-text">${escapeHtml(boss.desc)}</div>` : ""}
@@ -336,7 +336,7 @@ function renderBoss() {
       <div class="boss-hptext">${boss.slain ? "DEFEATED" : `${pct}% HP`}</div>
     </div>
     ${boss.slain
-      ? `<div class="boss-slain-line">&#9733; Problem addressed! The party committed ${looted} owned remediation step(s).</div>`
+      ? `<div class="boss-slain-line">&#9733; ${escapeHtml(boss.name)} has been defeated! The party claimed ${looted} remediation step(s).</div>`
       : `<div class="boss-sub">Propose remediation steps. Every resolved step damages the boss — owned fixes hit hardest.</div>`}
     ${renderRemediationPlan(boss)}`;
 }
@@ -359,7 +359,7 @@ function renderRemediationPlan(boss) {
     let statusCls, statusText;
     if (owned) {
       statusCls = "owned";
-      statusText = `&#128100; ${escapeHtml(owned.ownerReal || owned.ownerName)}`;
+      statusText = `${icon("person")} ${escapeHtml(owned.ownerReal || owned.ownerName)}`;
     } else if (onTable) {
       statusCls = "ontable";
       statusText = view.resolved ? "unowned" : "on the table";
@@ -375,7 +375,7 @@ function renderRemediationPlan(boss) {
     // facilitator gets a Drop button for steps not yet dropped (and not blocked
     // by a live unresolved drop)
     const dropBtn = (isFac && !s.dropped)
-      ? `<button class="btn btn-gold rem-drop" data-drop-step="${s.id}" ${liveUnresolved ? "disabled title='Resolve the current drop first'" : ""}>Drop</button>`
+      ? `<button class="btn btn-primary rem-drop" data-drop-step="${s.id}" ${liveUnresolved ? "disabled title='Resolve the current drop first'" : ""}>Drop</button>`
       : "";
 
     return `
@@ -411,13 +411,13 @@ function renderActiveDrop() {
     const isFac = view.you.role === "facilitator";
     let hint;
     if (!boss) {
-      hint = isFac ? "No problem pulled. Pull a boss (a problem to address) to start the encounter." : "No problem pulled yet. Waiting for the facilitator…";
+      hint = isFac ? "The dungeon is quiet. Pull a boss — a problem worth tackling — to begin." : "The dungeon is quiet. Waiting for the facilitator to pull a boss…";
     } else if (boss.slain) {
-      hint = isFac ? "Problem addressed. Pull the next boss, or end the encounter." : "Problem addressed. Waiting for the facilitator…";
+      hint = isFac ? "The boss lies defeated. Pull the next one, or end the encounter." : "The boss lies defeated. Waiting for the facilitator…";
     } else {
       hint = isFac
-        ? "Boss is up. Anyone can propose remediation steps; drop one from the plan below (or from the backlog) to put it up for a roll."
-        : "Boss is up. Propose a remediation step above — the facilitator drops proposed steps for the roll.";
+        ? "The boss is engaged! Anyone can propose remediation steps; drop one from the plan below (or from the backlog) to roll for it."
+        : "The boss is engaged! Propose a remediation step above — the facilitator drops proposed steps for the roll.";
     }
     el.className = "active-drop empty";
     el.innerHTML = `<p class="empty-hint">${hint}</p>`;
@@ -426,7 +426,7 @@ function renderActiveDrop() {
   const r = RARITY[drop.item.rarity];
   el.className = "active-drop filled";
   el.innerHTML = `
-    <div class="drop-icon r-${r.cls}">&#128142;</div>
+    <div class="drop-icon r-${r.cls}">${icon("gem")}</div>
     <div class="drop-meta">
       <h3 class="r-${r.cls}">${escapeHtml(drop.item.name)}</h3>
       <div class="drop-rarity r-${r.cls}">${r.label}</div>
@@ -483,7 +483,7 @@ function renderResult() {
     headline = `<span class="r-${r.cls}">${escapeHtml(res.winnerName)}</span>${who} wins
       <b class="r-${r.cls}">${escapeHtml(res.itemName)}</b> by <b>${res.winnerContext}</b> roll!`;
   } else {
-    headline = `Everyone passed on <b class="r-${r.cls}">${escapeHtml(res.itemName)}</b>. Unclaimed.`;
+    headline = `Everyone passed on <b class="r-${r.cls}">${escapeHtml(res.itemName)}</b>. It lies unclaimed.`;
   }
   const rows = res.rolls.map((rw) => {
     const win = rw.memberId === res.winnerId ? ` <span class="win-tag">&#9733; WIN</span>` : "";
@@ -523,7 +523,7 @@ function renderParty() {
 
     // claim button when the slot is free and this client has no slot yet
     const claimBtn = (!m.claimed && !view.you.memberId)
-      ? `<button class="btn btn-gold" data-claim="${m.id}" style="font-size:12px;padding:6px 0;width:100%;">Claim this slot</button>`
+      ? `<button class="btn btn-primary" data-claim="${m.id}" style="font-size:12px;padding:6px 0;width:100%;">Claim this slot</button>`
       : (mine ? `<div class="muted" style="font-size:11px;text-align:center;">This is you</div>` : "");
 
     const myTasks = view.log.filter((t) => t.ownerId === m.id);
@@ -546,11 +546,11 @@ function renderParty() {
 
     panel.innerHTML = `
       <div class="member-head">
-        <div class="member-avatar">${escapeHtml(initials)}</div>
+        <div class="member-avatar">${raceIcon(m.race) || escapeHtml(initials)}</div>
         <div class="member-headtext">
           <div class="member-name">${crest}${escapeHtml(m.name)}${mine ? " &#9733;" : ""}</div>
           <div class="member-class">${escapeHtml((m.race ? m.race + " " : "") + m.cls)}</div>
-          ${m.realName ? `<div class="member-real">&#128100; ${escapeHtml(m.realName)}</div>` : ""}
+          ${m.realName ? `<div class="member-real">${icon("person")} ${escapeHtml(m.realName)}</div>` : ""}
         </div>
       </div>
       <div class="member-roll">${status}</div>
@@ -574,7 +574,7 @@ function renderLog() {
   const list = $("#loot-log-list");
   list.innerHTML = "";
   if (view.log.length === 0) {
-    list.innerHTML = `<li class="muted" style="justify-content:center;">No loot distributed yet.</li>`;
+    list.innerHTML = `<li class="muted" style="justify-content:center;">No loot has dropped yet.</li>`;
     return;
   }
   [...view.log].reverse().forEach((t) => {
@@ -593,7 +593,7 @@ function renderLog() {
         <span class="log-rarity-dot bg-${r.cls}"></span>
         <input type="checkbox" data-task="${t.id}" ${t.done ? "checked" : ""}/>
         <span class="log-name r-${r.cls}">${escapeHtml(t.name)}</span>
-        <span class="log-owner">&#128100; ${escapeHtml(t.ownerReal || t.ownerName)}${t.ownerReal ? ` <span class="log-char">as ${escapeHtml(t.ownerName)}</span>` : ""}</span>`;
+        <span class="log-owner">${icon("person")} ${escapeHtml(t.ownerReal || t.ownerName)}${t.ownerReal ? ` <span class="log-char">as ${escapeHtml(t.ownerName)}</span>` : ""}</span>`;
     }
     list.appendChild(li);
   });
@@ -624,7 +624,7 @@ function showBossToast(boss) {
   const toast = document.createElement("div");
   toast.className = "loot-toast t-legendary";
   toast.innerHTML = `
-    <div class="toast-icon">&#9876;</div>
+    <div class="toast-icon">${icon("swords")}</div>
     <div class="toast-body">
       <div class="toast-received">Boss defeated:</div>
       <div class="toast-item">[${escapeHtml(boss.name)}]</div>
@@ -653,7 +653,7 @@ function showLootToast(itemName, rarity, winnerName) {
   const toast = document.createElement("div");
   toast.className = `loot-toast t-${r.cls}`;
   toast.innerHTML = `
-    <div class="toast-icon">&#128142;</div>
+    <div class="toast-icon">${icon("gem")}</div>
     <div class="toast-body">
       <div class="toast-received">You receive loot:</div>
       <div class="toast-item">[${escapeHtml(itemName)}]</div>
@@ -685,9 +685,9 @@ function flashError(message) {
   toast.className = "loot-toast t-poor";
   toast.style.setProperty("--toast-color", "var(--need)");
   toast.innerHTML = `
-    <div class="toast-icon">&#9888;</div>
+    <div class="toast-icon">${icon("warning")}</div>
     <div class="toast-body">
-      <div class="toast-received">Heads up</div>
+      <div class="toast-received">You can't do that</div>
       <div class="toast-item" style="white-space:normal;">${escapeHtml(message)}</div>
     </div>`;
   stack.appendChild(toast);
@@ -760,7 +760,7 @@ function renderManualDropModal() {
       <span class="log-rarity-dot bg-${r.cls}"></span>
       <span class="li-name r-${r.cls}">${escapeHtml(l.name)}</span>
       <span class="li-sub">${r.label}</span>
-      <button class="btn btn-gold li-drop" data-drop-loot="${l.id}">Drop</button>`;
+      <button class="btn btn-primary li-drop" data-drop-loot="${l.id}">Drop</button>`;
     list.appendChild(li);
   });
 }

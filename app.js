@@ -153,7 +153,7 @@ function renderBoss() {
   bossEl.style.setProperty("--boss-color", tier.color);
   bossEl.innerHTML = `
     <div class="boss-head">
-      <div class="boss-name"><span class="skull">${boss.slain ? "&#9876;" : "&#128128;"}</span>${escapeHtml(boss.name)}</div>
+      <div class="boss-name"><span class="skull">${boss.slain ? icon("swords") : icon("skull")}</span>${escapeHtml(boss.name)}</div>
       <div class="boss-tier">${tier.label}</div>
     </div>
     ${boss.desc ? `<div class="boss-desc-text">${escapeHtml(boss.desc)}</div>` : ""}
@@ -162,7 +162,7 @@ function renderBoss() {
       <div class="boss-hptext">${boss.slain ? "DEFEATED" : `${pct}% HP`}</div>
     </div>
     ${boss.slain
-      ? `<div class="boss-slain-line">&#9733; Problem addressed! The party committed ${countBossLoot(boss.id)} owned remediation step(s).</div>`
+      ? `<div class="boss-slain-line">&#9733; ${escapeHtml(boss.name)} has been defeated! The party claimed ${countBossLoot(boss.id)} remediation step(s).</div>`
       : `<div class="boss-sub">Propose remediation steps. Every resolved step damages the boss — owned fixes hit hardest.</div>`}
     ${renderRemediationPlan(boss)}
   `;
@@ -184,7 +184,7 @@ function renderRemediationPlan(boss) {
     const owned = state.log.find((t) => t.stepId === s.id && !t.passedOver);
     const statusCls = owned ? "owned" : "unowned";
     const statusText = owned
-      ? `&#128100; ${escapeHtml(owned.ownerName)}`
+      ? `${icon("person")} ${escapeHtml(owned.ownerName)}`
       : `unowned`;
     return `
       <li class="rem-step ${statusCls}">
@@ -205,10 +205,10 @@ function renderActiveDrop() {
   if (!drop) {
     const boss = state.boss;
     const hint = !boss
-      ? "No problem pulled. Pull a boss (a problem to address) to start the encounter."
+      ? "The dungeon is quiet. Pull a boss — a problem worth tackling — to begin."
       : boss.slain
-        ? "Problem addressed. Pull the next boss, or end the encounter."
-        : "Boss is up. Propose a remediation step above (or drop from the backlog) — each resolved drop damages it.";
+        ? "The boss lies defeated. Pull the next one, or end the encounter."
+        : "The boss is engaged! Propose a remediation step above (or drop from the backlog) — each resolved drop damages it.";
     activeDropEl.className = "active-drop empty";
     activeDropEl.innerHTML = `<p class="empty-hint">${hint}</p>`;
     resolveBar.classList.add("hidden");
@@ -220,7 +220,7 @@ function renderActiveDrop() {
   const r = RARITY[item.rarity];
   activeDropEl.className = "active-drop filled";
   activeDropEl.innerHTML = `
-    <div class="drop-icon r-${r.cls}">&#128142;</div>
+    <div class="drop-icon r-${r.cls}">${icon("gem")}</div>
     <div class="drop-meta">
       <h3 class="r-${r.cls}">${escapeHtml(item.name)}</h3>
       <div class="drop-rarity r-${r.cls}">${r.label}</div>
@@ -348,7 +348,7 @@ function renderLog() {
     `${looted} item${looted === 1 ? "" : "s"} looted` + (passed ? `, ${passed} passed over` : "");
   lootLogList.innerHTML = "";
   if (state.log.length === 0) {
-    lootLogList.innerHTML = `<li class="muted" style="justify-content:center;">No loot distributed yet.</li>`;
+    lootLogList.innerHTML = `<li class="muted" style="justify-content:center;">No loot has dropped yet.</li>`;
     return;
   }
   [...state.log].reverse().forEach((t) => {
@@ -366,7 +366,7 @@ function renderLog() {
         <span class="log-rarity-dot bg-${r.cls}"></span>
         <input type="checkbox" data-task="${t.id}" ${t.done ? "checked" : ""}/>
         <span class="log-name r-${r.cls}">${escapeHtml(t.name)}</span>
-        <span class="log-owner">&#128100; ${escapeHtml(t.ownerName)}</span>`;
+        <span class="log-owner">${icon("person")} ${escapeHtml(t.ownerName)}</span>`;
     }
     lootLogList.appendChild(li);
   });
@@ -581,7 +581,7 @@ function showLootToast(itemName, rarity, winnerName) {
   const toast = document.createElement("div");
   toast.className = `loot-toast t-${r.cls}`;
   toast.innerHTML = `
-    <div class="toast-icon">&#128142;</div>
+    <div class="toast-icon">${icon("gem")}</div>
     <div class="toast-body">
       <div class="toast-received">You receive loot:</div>
       <div class="toast-item">[${escapeHtml(itemName)}]</div>
@@ -619,7 +619,7 @@ function showBossToast(boss) {
   const toast = document.createElement("div");
   toast.className = "loot-toast t-legendary";
   toast.innerHTML = `
-    <div class="toast-icon">&#9876;</div>
+    <div class="toast-icon">${icon("swords")}</div>
     <div class="toast-body">
       <div class="toast-received">Boss defeated:</div>
       <div class="toast-item">[${escapeHtml(boss.name)}]</div>
@@ -773,7 +773,7 @@ function renderManualDropModal() {
       <span class="log-rarity-dot bg-${r.cls}"></span>
       <span class="li-name r-${r.cls}">${escapeHtml(l.name)}</span>
       <span class="li-sub">${r.label}</span>
-      <button class="btn btn-gold li-drop" data-drop-loot="${l.id}">Drop</button>
+      <button class="btn btn-primary li-drop" data-drop-loot="${l.id}">Drop</button>
     `;
     list.appendChild(li);
   });
@@ -897,7 +897,7 @@ $("#btn-roster").addEventListener("click", () => openModal("#modal-roster"));
 $("#btn-export").addEventListener("click", exportTasks);
 
 $("#btn-reset").addEventListener("click", () => {
-  if (confirm("Reset everything — loot table, party, and loot log — to defaults?")) {
+  if (confirm("Disband the group? This resets the loot table, party, and loot log to defaults.")) {
     state = defaultState();
     render();
   }

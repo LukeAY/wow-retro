@@ -9,7 +9,7 @@
 <body>
   <div class="topbar">
     <div class="brand">
-      <span class="brand-mark">&#9876;</span>
+      <span class="brand-mark"><span data-icon="swords"></span></span>
       <h1>Loot Council</h1>
       <span class="brand-sub">Online &mdash; per-laptop rolling</span>
     </div>
@@ -18,22 +18,22 @@
       <span id="room-badge" class="muted"></span>
       <button id="btn-config" class="btn btn-ghost hidden">Loot Table</button>
       <button id="btn-roster" class="btn btn-ghost hidden">Party</button>
-      <button id="btn-export" class="btn btn-ghost hidden">Export Tasks</button>
-      <button id="btn-leave" class="btn btn-ghost btn-danger hidden">Leave</button>
+      <button id="btn-export" class="btn btn-ghost hidden" title="Copy the action items as markdown">Loot Ledger</button>
+      <button id="btn-leave" class="btn btn-ghost btn-danger hidden">Leave Group</button>
     </div>
   </div>
 
   <!-- Lobby: create or join -->
   <main id="lobby" class="layout">
     <section class="card">
-      <div class="section-head"><h2>Start or join a session</h2></div>
+      <div class="section-head"><h2>Form a Group</h2></div>
       <p class="muted">The facilitator creates a room and shares the 4-letter code. Everyone else joins from their own laptop and claims a party slot.</p>
       <div class="add-form" style="margin-top:16px;">
-        <button id="btn-create" class="btn btn-gold">Create a room (I'm the facilitator)</button>
+        <button id="btn-create" class="btn btn-primary">Create a Room (I'm the Facilitator)</button>
       </div>
       <div class="add-form" style="margin-top:12px;">
         <input id="join-code" type="text" maxlength="4" placeholder="ROOM CODE" style="text-transform:uppercase;letter-spacing:3px;" />
-        <button id="btn-join" class="btn">Join room</button>
+        <button id="btn-join" class="btn">Join Group</button>
       </div>
       <p id="lobby-error" class="muted" style="color:var(--need);min-height:18px;"></p>
     </section>
@@ -42,7 +42,7 @@
   <!-- Character creation (shown after joining, before you have a character) -->
   <main id="create-char" class="layout hidden">
     <section class="card">
-      <div class="section-head"><h2>Create your character</h2></div>
+      <div class="section-head"><h2>Create Your Character</h2></div>
       <p class="muted">Pick a name and class. This becomes your own panel &mdash; no need to wait for the host.</p>
 
       <label class="muted" style="display:block;margin:16px 0 6px;">Character name</label>
@@ -63,7 +63,7 @@
       <div id="class-picker" class="class-picker"></div>
 
       <div style="margin-top:20px;">
-        <button id="btn-create-char" class="btn btn-gold">Enter the raid</button>
+        <button id="btn-create-char" class="btn btn-primary">Enter the Dungeon</button>
       </div>
       <p id="char-error" class="muted" style="color:var(--need);min-height:18px;"></p>
     </section>
@@ -75,8 +75,8 @@
       <div class="stage-head">
         <h2>Boss Encounter</h2>
         <div class="stage-controls" id="facilitator-controls">
-          <button id="btn-pull-boss" class="btn btn-gold">&#128128; Pull a Boss</button>
-          <button id="btn-drop-random" class="btn btn-ghost hidden">&#128142; Drop from Backlog</button>
+          <button id="btn-pull-boss" class="btn btn-primary"><span data-icon="skull"></span> Pull a Boss</button>
+          <button id="btn-drop-random" class="btn btn-ghost hidden"><span data-icon="gem"></span> Drop from Backlog</button>
           <button id="btn-drop-manual" class="btn btn-ghost hidden">Pick from Backlog</button>
           <button id="btn-end-boss" class="btn btn-ghost btn-danger hidden">End Encounter</button>
         </div>
@@ -87,7 +87,7 @@
 
       <!-- Inline remediation-step composer (facilitator-only, boss up). -->
       <div id="remediation-composer" class="remediation-composer hidden">
-        <div class="rc-head">&#9876; Propose a remediation step &mdash; anyone can contribute</div>
+        <div class="rc-head"><span data-icon="swords"></span> Call a strategy &mdash; anyone in the group can propose a remediation step</div>
         <div class="add-form">
           <input id="rc-name" type="text" placeholder="e.g. Add a retry around the flaky network call" />
           <select id="rc-rarity" title="How much this step matters (priority)">
@@ -99,13 +99,13 @@
             <option value="legendary">Legendary (top)</option>
           </select>
           <input id="rc-desc" type="text" placeholder="Detail (optional)" />
-          <button id="btn-drop-step" class="btn btn-gold">Propose Step</button>
+          <button id="btn-drop-step" class="btn btn-primary">Propose Step</button>
         </div>
         <p class="rc-hint muted">Adds it to this boss's remediation plan. The facilitator drops proposed steps onto the table for Need / Greed / Pass when the room is ready.</p>
       </div>
 
       <div id="active-drop" class="active-drop empty">
-        <p class="empty-hint">No loot on the table.</p>
+        <p class="empty-hint">The dungeon is quiet.</p>
       </div>
 
       <!-- My own vote controls (player-facing) -->
@@ -123,7 +123,7 @@
 
       <div id="resolve-bar" class="resolve-bar hidden">
         <div id="vote-tally" class="vote-tally"></div>
-        <button id="btn-resolve" class="btn btn-gold hidden">Roll &amp; Resolve</button>
+        <button id="btn-resolve" class="btn btn-primary hidden">Roll &amp; Resolve</button>
       </div>
 
       <div id="result-banner" class="result-banner hidden"></div>
@@ -139,7 +139,7 @@
 
     <section id="accountability" class="accountability card hidden">
       <div class="section-head">
-        <h2>Accountability</h2>
+        <h2>Quest Log</h2>
         <span id="accountability-sub" class="muted"></span>
       </div>
       <ul id="accountability-list" class="accountability-list"></ul>
@@ -171,7 +171,7 @@
           <option value="legendary">Legendary (top)</option>
         </select>
         <input id="loot-desc" type="text" placeholder="Description (optional)" />
-        <button id="btn-add-loot" class="btn btn-gold">Add</button>
+        <button id="btn-add-loot" class="btn btn-primary">Add</button>
       </div>
     </div>
   </div>
@@ -185,7 +185,7 @@
       <div class="add-form">
         <input id="member-name" type="text" placeholder="Member name" />
         <select id="member-class"></select>
-        <button id="btn-add-member" class="btn btn-gold">Add</button>
+        <button id="btn-add-member" class="btn btn-primary">Add</button>
       </div>
     </div>
   </div>
@@ -216,13 +216,14 @@
         <option value="raid">Raid boss &mdash; big systemic issue (4 drops to kill)</option>
       </select>
       <div style="margin-top:20px;">
-        <button id="btn-confirm-boss" class="btn btn-gold">Pull Boss</button>
+        <button id="btn-confirm-boss" class="btn btn-primary">Pull Boss</button>
       </div>
     </div>
   </div>
 
   <div id="toast-stack" class="toast-stack"></div>
 
+  <script src="icons.js"></script>
   <script src="net-client.js"></script>
 </body>
 </html>

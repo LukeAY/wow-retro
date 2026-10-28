@@ -48,14 +48,14 @@ Then open:
    **WoW: Forever** rules (see below), and each panel shows a faction crest
    (Alliance / Horde) plus the owner's real name. The real name also appears in
    the loot log and the exported action-item list, so every task has a clear
-   owner. An **Accountability** panel summarizes who owns how many open vs. done
+   owner. A **Quest Log** panel summarizes who owns how many open vs. done
    tasks, and hovering a party panel shows that person's details and workload.
 3. Facilitator **drops loot** (random or a specific item).
 4. Each player picks **Need / Greed / Pass** on their own screen. Others see only
    that a vote was cast, not what it was.
 5. Facilitator clicks **Roll & Resolve**. The server rolls, reveals every roll,
    and the winner gets a loot toast + the task.
-6. **Export Tasks** copies a markdown remediation plan **grouped by problem** —
+6. **Loot Ledger** copies a markdown remediation plan **grouped by problem** —
    each boss with its steps, owners, and done state as a checklist.
 
 Players make their own characters, so the host doesn't pre-build the roster. The
