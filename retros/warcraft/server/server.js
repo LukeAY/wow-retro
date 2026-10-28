@@ -104,8 +104,9 @@ function serializeRoom(room) {
     code: room.code,
     facilitatorId: room.facilitatorId, // kept so a refresh can reclaim the role
     lootTable: room.lootTable,
-    members: room.members.map((m) => ({ id: m.id, name: m.name, cls: m.cls, race: m.race || "Human" })),
+    members: room.members.map((m) => ({ id: m.id, name: m.name, realName: m.realName || "", cls: m.cls, race: m.race || "Human" })),
     boss: room.boss,
+    bossLog: room.bossLog || [],
     activeDrop: room.activeDrop,
     lastResult: room.lastResult,
     log: room.log,
@@ -151,10 +152,11 @@ function loadRooms() {
       facilitatorId: r.facilitatorId || null, // reclaimable by whoever presents it
       lootTable: r.lootTable || [],
       members: (r.members || []).map((m) => ({
-        id: m.id, name: m.name, cls: m.cls, race: m.race || "Human",
+        id: m.id, name: m.name, realName: m.realName || "", cls: m.cls, race: m.race || "Human",
         clientId: null, connected: false, // nobody is connected after a restart
       })),
       boss: r.boss || null,
+      bossLog: r.bossLog || [],
       activeDrop: r.activeDrop || null,
       lastResult: r.lastResult || null,
       log: r.log || [],
@@ -174,14 +176,10 @@ function makeRoomCode() {
   return code;
 }
 
+// A fresh room starts with an empty backlog — the party fills it by proposing
+// remediation steps (or adding items to the Loot Table) during the session.
 function seededLootTable() {
-  return [
-    { id: randomUUID(), name: "Update the flaky test suite", rarity: "rare", desc: "The one that fails 1 in 5 CI runs." },
-    { id: randomUUID(), name: "Write onboarding docs", rarity: "uncommon", desc: "New starter had to ask in Slack 12 times." },
-    { id: randomUUID(), name: "Refactor the auth module", rarity: "epic", desc: "Nobody wants to touch it. That's the problem." },
-    { id: randomUUID(), name: "Clean up stale feature flags", rarity: "common", desc: "" },
-    { id: randomUUID(), name: "Tame the deployment pipeline", rarity: "legendary", desc: "The final boss of this sprint." },
-  ];
+  return [];
 }
 
 function createRoom() {
@@ -192,6 +190,7 @@ function createRoom() {
     lootTable: seededLootTable(),
     members: [],
     boss: null,
+    bossLog: [],      // archived problems (id, name, tier, slain, remediation[])
     activeDrop: null,
     lastResult: null,
     log: [],
@@ -200,6 +199,23 @@ function createRoom() {
   };
   rooms.set(code, room);
   return room;
+}
+
+// Archive the active boss's identity + remediation plan so a per-problem
+// export survives pulling the next boss, ending the encounter, or a restart.
+function archiveBoss(room) {
+  const boss = room.boss;
+  if (!boss) return;
+  if (!Array.isArray(room.bossLog)) room.bossLog = [];
+  if (room.bossLog.some((b) => b.id === boss.id)) return;
+  room.bossLog.push({
+    id: boss.id,
+    name: boss.name,
+    desc: boss.desc || "",
+    tier: boss.tier,
+    slain: boss.slain,
+    remediation: boss.remediation || [],
+  });
 }
 
 /* ---------------- State views (what each client is allowed to see) ---------------- */
@@ -238,6 +254,7 @@ function viewFor(room, client) {
     members: room.members.map((m) => ({
       id: m.id,
       name: m.name,
+      realName: m.realName || "",
       cls: m.cls,
       race: m.race || "Human",
       faction: FACTION[m.race] || null,
@@ -247,6 +264,7 @@ function viewFor(room, client) {
       hasVoted: room.activeDrop ? !!room.activeDrop.choices[m.id] : false,
     })),
     boss: room.boss,
+    bossLog: room.bossLog || [],
     activeDrop: room.activeDrop
       ? { id: room.activeDrop.id, item: room.activeDrop.item }
       : null,
@@ -297,6 +315,7 @@ function resolveDrop(room) {
   const rolls = room.members.map((m) => ({
     memberId: m.id,
     name: m.name,
+    realName: m.realName || "",
     choice: drop.choices[m.id] || "pass",
     roll: null,
   }));
@@ -322,6 +341,7 @@ function resolveDrop(room) {
     rolls,
     winnerId: winner ? winner.memberId : null,
     winnerName: winner ? winner.name : null,
+    winnerReal: winner ? (winner.realName || "") : null,
     winnerContext,
   };
 
@@ -332,7 +352,26 @@ function resolveDrop(room) {
       rarity: drop.item.rarity,
       ownerId: winner.memberId,
       ownerName: winner.name,
+      ownerReal: winner.realName || "",
       bossId: room.boss ? room.boss.id : null,
+      stepId: drop.item.id || null, // ties an owned task back to its remediation step
+      passedOver: false,
+      done: false,
+    });
+  } else {
+    // Nobody wanted it: record a "passed over" entry so the register keeps a
+    // trace that the item was discussed and consciously dropped. No owner, not
+    // an actionable task.
+    room.log.push({
+      id: randomUUID(),
+      name: drop.item.name,
+      rarity: drop.item.rarity,
+      ownerId: null,
+      ownerName: "",
+      ownerReal: "",
+      bossId: room.boss ? room.boss.id : null,
+      stepId: drop.item.id || null,
+      passedOver: true,
       done: false,
     });
   }
@@ -399,6 +438,10 @@ const handlers = {
     const name = (msg.name || "").trim();
     if (!name) return sendError(ws, "Enter a character name.");
     if (name.length > 24) return sendError(ws, "Name is too long (24 max).");
+    // Real name is who's accountable for the looted task. Required.
+    const realName = (msg.realName || "").trim();
+    if (!realName) return sendError(ws, "Enter your real name (for accountability).");
+    if (realName.length > 40) return sendError(ws, "Real name is too long (40 max).");
     const race = RACE_NAMES.includes(msg.race) ? msg.race : "Human";
     // Enforce the Forever race/class matrix: reject illegal combos outright so
     // the server stays the source of truth even if a client is tampered with.
@@ -411,6 +454,7 @@ const handlers = {
     const mine = room.members.find((m) => m.clientId === client.id);
     if (mine) {
       mine.name = name;
+      mine.realName = realName;
       mine.cls = cls;
       mine.race = race;
       return broadcast(room);
@@ -421,6 +465,7 @@ const handlers = {
       (m) => !m.clientId && m.name.toLowerCase() === name.toLowerCase()
     );
     if (existing) {
+      existing.realName = realName;
       existing.cls = cls;
       existing.race = race;
       existing.clientId = client.id;
@@ -433,6 +478,7 @@ const handlers = {
     const member = {
       id: randomUUID(),
       name,
+      realName,
       cls,
       race,
       clientId: client.id,
@@ -526,9 +572,12 @@ const handlers = {
     if (!room || !isFacilitator(room, client)) return;
     const name = (msg.name || "").trim() || "Unnamed Topic";
     if (name.length > 60) return sendError(ws, "Topic name is too long (60 max).");
+    const desc = (msg.desc || "").trim();
+    if (desc.length > 500) return sendError(ws, "Description is too long (500 max).");
     const tier = BOSS_TIERS[msg.tier] ? msg.tier : "elite";
     const hpMax = BOSS_TIERS[tier].hp;
-    room.boss = { id: randomUUID(), name, tier, hpMax, hp: hpMax, slain: false };
+    archiveBoss(room);
+    room.boss = { id: randomUUID(), name, desc, tier, hpMax, hp: hpMax, slain: false, remediation: [] };
     room.activeDrop = null;
     room.lastResult = null;
     broadcast(room);
@@ -538,8 +587,56 @@ const handlers = {
   endBoss(ws, client, msg) {
     const room = client.room;
     if (!room || !isFacilitator(room, client)) return;
+    archiveBoss(room);
     room.boss = null;
     room.activeDrop = null;
+    room.lastResult = null;
+    broadcast(room);
+  },
+
+  // ANYONE in the room can propose a remediation step for the live boss. It's
+  // added to the boss's remediation plan as a suggestion (not yet on the
+  // table). The facilitator later drops it for the roll via `dropStep`.
+  proposeStep(ws, client, msg) {
+    const room = client.room;
+    if (!room) return;
+    if (!room.boss || room.boss.slain) return sendError(ws, "Pull a boss before proposing a step.");
+    const name = (msg.name || "").trim();
+    if (!name) return sendError(ws, "Enter a remediation step.");
+    if (name.length > 120) return sendError(ws, "Step name is too long (120 max).");
+    const rarity = RARITIES.includes(msg.rarity) ? msg.rarity : "uncommon";
+    // attribute the proposal to the proposer's character/real name when known
+    const me = client.memberId ? room.members.find((m) => m.id === client.memberId) : null;
+    const step = {
+      id: randomUUID(),
+      name,
+      rarity,
+      desc: (msg.desc || "").trim(),
+      proposedBy: me ? me.name : "Facilitator",
+      proposedReal: me ? (me.realName || "") : "",
+      dropped: false, // becomes true once the facilitator drops it for the roll
+    };
+    if (!Array.isArray(room.boss.remediation)) room.boss.remediation = [];
+    room.boss.remediation.push(step);
+    // Also add it to the backlog (loot table) so it's reusable later and shows
+    // up in the Loot Table. Shares the step's id so the two stay linked.
+    room.lootTable.push({ id: step.id, name: step.name, rarity: step.rarity, desc: step.desc });
+    broadcast(room);
+  },
+
+  // Facilitator drops a previously-proposed remediation step onto the table
+  // for Need/Greed/Pass. Can't drop over a live unresolved drop.
+  dropStep(ws, client, msg) {
+    const room = client.room;
+    if (!room || !isFacilitator(room, client)) return;
+    if (!room.boss || room.boss.slain) return sendError(ws, "No live boss to attack.");
+    const resolved = room.lastResult && room.activeDrop && room.lastResult.dropId === room.activeDrop.id;
+    if (room.activeDrop && !resolved) return sendError(ws, "Resolve the current drop before dropping another.");
+    const step = (room.boss.remediation || []).find((s) => s.id === msg.stepId);
+    if (!step) return sendError(ws, "That step no longer exists.");
+    if (step.dropped) return sendError(ws, "That step has already been dropped.");
+    step.dropped = true;
+    room.activeDrop = { id: randomUUID(), item: { ...step }, choices: {} };
     room.lastResult = null;
     broadcast(room);
   },
@@ -556,6 +653,11 @@ const handlers = {
     if (!item) return sendError(ws, "Item not found.");
     room.activeDrop = { id: randomUUID(), item: { ...item }, choices: {} };
     room.lastResult = null;
+    // if this backlog item corresponds to a remediation step, mark it dropped
+    if (room.boss && Array.isArray(room.boss.remediation)) {
+      const step = room.boss.remediation.find((s) => s.id === item.id);
+      if (step) step.dropped = true;
+    }
     broadcast(room);
   },
 
@@ -596,6 +698,7 @@ const handlers = {
     if (!room || !isFacilitator(room, client)) return;
     room.lootTable = seededLootTable();
     room.boss = null;
+    room.bossLog = [];
     room.activeDrop = null;
     room.lastResult = null;
     room.log = [];

@@ -589,18 +589,47 @@ h1, h2, h3 {
   flex-shrink: 0;
 }
 
-/* ---------- Race select ---------- */
-.race-select {
-  font: inherit;
-  padding: 10px 12px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--bg-2);
-  color: var(--text);
-  width: min(320px, 100%);
+/* ---------- Race picker (buttons, grouped by faction) ---------- */
+.race-picker { display: flex; flex-direction: column; gap: 14px; max-width: 640px; }
+.race-group-label {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--faction-color, var(--gold));
+  margin-bottom: 8px;
 }
-.race-select optgroup { color: var(--gold); font-style: normal; }
-.race-select option { color: var(--text); background: var(--bg-2); }
+.race-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+}
+.race-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  transition: all .12s ease;
+}
+.race-option:hover { border-color: var(--faction-color, var(--gold)); transform: translateY(-1px); }
+.race-option.active {
+  border-color: var(--faction-color, var(--gold));
+  box-shadow: inset 0 0 0 1px var(--faction-color, var(--gold)), 0 0 12px -4px var(--faction-color, var(--gold));
+  background: #171c27;
+}
+.race-option .dot {
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--faction-color, var(--gold));
+  flex-shrink: 0;
+}
 
 /* ---------- Toast value line (gold/silver/copper coins) ---------- */
 .loot-toast .toast-value {
@@ -811,4 +840,129 @@ h1, h2, h3 {
 @media (prefers-reduced-motion: reduce) {
   .boss, .boss.hit { animation: dropIn .01s ease; }
   .boss-hp { transition: none; }
+}
+
+/* ---------- Real name (accountability) ---------- */
+.member-real {
+  font-size: 11px;
+  color: var(--gold);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.real-name { color: var(--gold); font-weight: 600; }
+.log-char { color: var(--muted); font-size: 12px; font-style: italic; }
+
+/* ---------- Accountability summary ---------- */
+.accountability-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.accountability-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--need);
+  border-radius: 8px;
+}
+.accountability-row.all-clear { border-left-color: var(--uncommon); opacity: .85; }
+.acc-name { font-weight: 600; }
+.acc-char { color: var(--muted); font-size: 12px; font-style: italic; font-weight: 400; }
+.acc-counts { display: flex; align-items: center; gap: 12px; font-size: 13px; }
+.acc-open { color: var(--need); font-weight: 700; }
+.accountability-row.all-clear .acc-open { color: var(--muted); font-weight: 400; }
+.acc-done { color: var(--muted); }
+.acc-bar {
+  position: relative;
+  width: 80px; height: 6px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--need) 35%, var(--bg));
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.acc-bar-done {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  background: var(--uncommon);
+}
+@supports not (background: color-mix(in srgb, red, blue)) {
+  .acc-bar { background: #3a2326; }
+}
+
+/* ---------- Remediation-step composer (author a fix live) ---------- */
+.remediation-composer {
+  margin: 4px 0 16px;
+  padding: 12px 14px;
+  background: color-mix(in srgb, var(--gold) 6%, var(--bg-2));
+  border: 1px solid color-mix(in srgb, var(--gold) 30%, var(--border));
+  border-radius: 10px;
+}
+.rc-head {
+  font-family: "Cinzel", Georgia, serif;
+  font-size: 13px;
+  letter-spacing: .5px;
+  color: var(--gold);
+  margin-bottom: 8px;
+}
+.rc-hint { font-size: 12px; margin: 8px 0 0; }
+
+/* ---------- Remediation plan (steps proposed for a boss) ---------- */
+.rem-plan {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.rem-plan-head {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.rem-plan-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.rem-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--muted);
+  border-radius: 6px;
+  font-size: 13px;
+}
+.rem-step.owned { border-left-color: var(--uncommon); }
+.rem-step.unowned { opacity: .72; }
+.rem-name { flex: 1; }
+.rem-status { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.rem-step.owned .rem-status { color: var(--gold); }
+
+/* remediation-plan step states: proposed (awaiting a drop) and on-the-table */
+.rem-step.proposed { border-left-color: var(--gold); }
+.rem-step.proposed .rem-status { color: var(--gold); font-style: italic; }
+.rem-step.ontable { border-left-color: var(--rare, #0070dd); }
+.rem-step.ontable .rem-status { color: var(--rare, #0070dd); font-weight: 600; }
+.rem-drop {
+  font-size: 11px;
+  padding: 4px 10px;
+  white-space: nowrap;
+}
+.rem-drop:disabled { opacity: .45; cursor: not-allowed; }
+
+/* passed-over loot-log entries: recorded, but no owner and not a task */
+.loot-log-list li.passed-over { opacity: .62; }
+.loot-log-list li.passed-over .log-name { text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--muted) 70%, transparent); }
+.log-passed { color: var(--muted); font-style: italic; font-size: 12px; }
+
+/* boss description — the "what/why" of the problem, under the name */
+.boss-desc-text {
+  margin-top: 8px;
+  color: var(--text);
+  opacity: .9;
+  font-size: 13.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  border-left: 2px solid color-mix(in srgb, var(--boss-color, var(--need)) 55%, transparent);
+  padding-left: 10px;
 }

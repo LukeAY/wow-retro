@@ -45,12 +45,16 @@
       <div class="section-head"><h2>Create your character</h2></div>
       <p class="muted">Pick a name and class. This becomes your own panel &mdash; no need to wait for the host.</p>
 
-      <label class="muted" style="display:block;margin:16px 0 6px;">Name</label>
+      <label class="muted" style="display:block;margin:16px 0 6px;">Character name</label>
       <input id="char-name" type="text" maxlength="24" placeholder="e.g. Shadowmend"
         style="font:inherit;padding:10px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-2);color:var(--text);width:min(320px,100%);" />
 
+      <label class="muted" style="display:block;margin:18px 0 6px;">Your real name <span style="color:var(--gold);">(who's accountable for loot)</span></label>
+      <input id="char-realname" type="text" maxlength="40" placeholder="e.g. Alex Chen"
+        style="font:inherit;padding:10px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-2);color:var(--text);width:min(320px,100%);" />
+
       <label class="muted" style="display:block;margin:18px 0 6px;">Race</label>
-      <select id="char-race" class="race-select"></select>
+      <div id="race-picker" class="race-picker"></div>
 
       <label class="muted" style="display:block;margin:18px 0 6px;">
         Class <span id="faction-hint" class="faction-hint"></span>
@@ -72,14 +76,33 @@
         <h2>Boss Encounter</h2>
         <div class="stage-controls" id="facilitator-controls">
           <button id="btn-pull-boss" class="btn btn-gold">&#128128; Pull a Boss</button>
-          <button id="btn-drop-random" class="btn btn-gold hidden">&#128142; Attack &mdash; Drop Random Loot</button>
-          <button id="btn-drop-manual" class="btn btn-ghost hidden">Drop Specific Item</button>
+          <button id="btn-drop-random" class="btn btn-ghost hidden">&#128142; Drop from Backlog</button>
+          <button id="btn-drop-manual" class="btn btn-ghost hidden">Pick from Backlog</button>
           <button id="btn-end-boss" class="btn btn-ghost btn-danger hidden">End Encounter</button>
         </div>
       </div>
 
       <!-- Active boss (topic) with health bar -->
       <div id="boss" class="boss hidden"></div>
+
+      <!-- Inline remediation-step composer (facilitator-only, boss up). -->
+      <div id="remediation-composer" class="remediation-composer hidden">
+        <div class="rc-head">&#9876; Propose a remediation step &mdash; anyone can contribute</div>
+        <div class="add-form">
+          <input id="rc-name" type="text" placeholder="e.g. Add a retry around the flaky network call" />
+          <select id="rc-rarity" title="How much this step matters (priority)">
+            <option value="poor">Poor (trivial)</option>
+            <option value="common">Common (low)</option>
+            <option value="uncommon" selected>Uncommon (medium)</option>
+            <option value="rare">Rare (high)</option>
+            <option value="epic">Epic (critical)</option>
+            <option value="legendary">Legendary (top)</option>
+          </select>
+          <input id="rc-desc" type="text" placeholder="Detail (optional)" />
+          <button id="btn-drop-step" class="btn btn-gold">Propose Step</button>
+        </div>
+        <p class="rc-hint muted">Adds it to this boss's remediation plan. The facilitator drops proposed steps onto the table for Need / Greed / Pass when the room is ready.</p>
+      </div>
 
       <div id="active-drop" class="active-drop empty">
         <p class="empty-hint">No loot on the table.</p>
@@ -112,6 +135,14 @@
         <span id="party-count" class="muted"></span>
       </div>
       <div id="party-grid" class="party-grid"></div>
+    </section>
+
+    <section id="accountability" class="accountability card hidden">
+      <div class="section-head">
+        <h2>Accountability</h2>
+        <span id="accountability-sub" class="muted"></span>
+      </div>
+      <ul id="accountability-list" class="accountability-list"></ul>
     </section>
 
     <section class="loot-log card">
@@ -171,10 +202,13 @@
   <div id="modal-boss" class="modal hidden">
     <div class="modal-box">
       <div class="modal-head"><h3>Pull a Boss</h3><button class="modal-close" data-close>&times;</button></div>
-      <p class="muted">Name the retro topic you're about to fight, and pick how big it is. Tougher bosses have more health, so expect to loot more action items before they fall.</p>
-      <label class="muted" style="display:block;margin:16px 0 6px;">Topic (boss name)</label>
+      <p class="muted">Name the problem you're about to address, describe it so the room has context, and pick how big it is. Tougher bosses have more health, so expect to commit more remediation steps before they fall.</p>
+      <label class="muted" style="display:block;margin:16px 0 6px;">Problem (boss name)</label>
       <input id="boss-name" type="text" maxlength="60" placeholder="e.g. Flaky CI pipeline"
         style="font:inherit;padding:10px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-2);color:var(--text);width:100%;box-sizing:border-box;" />
+      <label class="muted" style="display:block;margin:18px 0 6px;">Description <span style="opacity:.7;">(optional &mdash; what is this problem, and why does it matter?)</span></label>
+      <textarea id="boss-desc" maxlength="500" rows="3" placeholder="e.g. CI fails ~1 in 5 runs on main, people re-run blindly, and we've started ignoring red builds."
+        style="font:inherit;padding:10px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-2);color:var(--text);width:100%;box-sizing:border-box;resize:vertical;"></textarea>
       <label class="muted" style="display:block;margin:18px 0 6px;">Difficulty</label>
       <select id="boss-tier" style="font:inherit;padding:10px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-2);color:var(--text);width:100%;">
         <option value="trash">Trash mob &mdash; minor nitpick (1 drop to kill)</option>

@@ -64,22 +64,19 @@ const CLASSES = {
 
 function defaultState() {
   return {
-    lootTable: [
-      { id: uid(), name: "Update the flaky test suite", rarity: "rare", desc: "The one that fails 1 in 5 CI runs." },
-      { id: uid(), name: "Write onboarding docs", rarity: "uncommon", desc: "New starter had to ask in Slack 12 times." },
-      { id: uid(), name: "Refactor the auth module", rarity: "epic", desc: "Nobody wants to touch it. That's the problem." },
-      { id: uid(), name: "Clean up stale feature flags", rarity: "common", desc: "" },
-      { id: uid(), name: "Tame the deployment pipeline", rarity: "legendary", desc: "The final boss of this sprint." },
-    ],
+    // Start empty — the party fills the backlog by proposing remediation steps
+    // (or adding items to the Loot Table) during the session.
+    lootTable: [],
     party: [
       { id: uid(), name: "Tank", cls: "Warrior" },
       { id: uid(), name: "Healer", cls: "Priest" },
       { id: uid(), name: "DPS", cls: "Rogue" },
     ],
-    boss: null,         // { id, name, tier, hpMax, hp, slain } — the active encounter
+    boss: null,         // { id, name, tier, hpMax, hp, slain, remediation[] } — the active encounter
+    bossLog: [],        // [{ id, name, tier, slain, remediation[] }] — past problems (for per-problem export)
     activeDrop: null,   // { item, choices: {memberId: 'need'|'greed'|'pass'} }
     lastResult: null,   // resolved result for the current/previous drop
-    log: [],            // [{ id, name, rarity, ownerId, ownerName, done }]
+    log: [],            // [{ id, name, rarity, ownerId, ownerName, bossId, stepId, passedOver, done }]
   };
 }
 
@@ -122,7 +119,16 @@ function render() {
   renderParty();
   renderLog();
   renderStageControls();
+  refreshOpenModals();
   save();
+}
+
+// Keep any open modal in sync with live state (e.g. a step proposed while the
+// Loot Table is open should appear immediately).
+function refreshOpenModals() {
+  if (!$("#modal-config").classList.contains("hidden")) renderLootTableModal();
+  if (!$("#modal-roster").classList.contains("hidden")) renderRosterModal();
+  if (!$("#modal-manual").classList.contains("hidden")) renderManualDropModal();
 }
 
 // Show the right set of stage buttons depending on whether a boss is up.
@@ -133,6 +139,8 @@ function renderStageControls() {
   $("#btn-drop-random").classList.toggle("hidden", !fighting);
   $("#btn-drop-manual").classList.toggle("hidden", !fighting);
   $("#btn-end-boss").classList.toggle("hidden", !boss);
+  const composer = $("#remediation-composer");
+  if (composer) composer.classList.toggle("hidden", !fighting);
 }
 
 function renderBoss() {
@@ -148,19 +156,48 @@ function renderBoss() {
       <div class="boss-name"><span class="skull">${boss.slain ? "&#9876;" : "&#128128;"}</span>${escapeHtml(boss.name)}</div>
       <div class="boss-tier">${tier.label}</div>
     </div>
+    ${boss.desc ? `<div class="boss-desc-text">${escapeHtml(boss.desc)}</div>` : ""}
     <div class="boss-hpwrap">
       <div class="boss-hp" style="width:${pct}%;"></div>
       <div class="boss-hptext">${boss.slain ? "DEFEATED" : `${pct}% HP`}</div>
     </div>
     ${boss.slain
-      ? `<div class="boss-slain-line">&#9733; Boss defeated! The party looted ${countBossLoot(boss.id)} item(s) from this topic.</div>`
-      : `<div class="boss-sub">Attack by dropping loot. Every resolved drop damages the boss — won items hit hardest.</div>`}
+      ? `<div class="boss-slain-line">&#9733; Problem addressed! The party committed ${countBossLoot(boss.id)} owned remediation step(s).</div>`
+      : `<div class="boss-sub">Propose remediation steps. Every resolved step damages the boss — owned fixes hit hardest.</div>`}
+    ${renderRemediationPlan(boss)}
   `;
 }
 
-// How many log entries were looted during this boss encounter.
+// How many log entries were looted during this boss encounter (owned only;
+// passed-over items are recorded but don't count as loot).
 function countBossLoot(bossId) {
-  return state.log.filter((t) => t.bossId === bossId).length;
+  return state.log.filter((t) => t.bossId === bossId && !t.passedOver).length;
+}
+
+// Render the boss's remediation plan: every step proposed for this problem,
+// flagged by whether it became an owned task (won) or was passed on.
+function renderRemediationPlan(boss) {
+  const steps = boss.remediation || [];
+  if (steps.length === 0) return "";
+  const rows = steps.map((s) => {
+    const r = RARITY[s.rarity] || RARITY.common;
+    const owned = state.log.find((t) => t.stepId === s.id && !t.passedOver);
+    const statusCls = owned ? "owned" : "unowned";
+    const statusText = owned
+      ? `&#128100; ${escapeHtml(owned.ownerName)}`
+      : `unowned`;
+    return `
+      <li class="rem-step ${statusCls}">
+        <span class="log-rarity-dot bg-${r.cls}"></span>
+        <span class="rem-name r-${r.cls}">${escapeHtml(s.name)}</span>
+        <span class="rem-status">${statusText}</span>
+      </li>`;
+  }).join("");
+  return `
+    <div class="rem-plan">
+      <div class="rem-plan-head">Remediation plan &mdash; ${steps.length} step(s) proposed</div>
+      <ul class="rem-plan-list">${rows}</ul>
+    </div>`;
 }
 
 function renderActiveDrop() {
@@ -168,10 +205,10 @@ function renderActiveDrop() {
   if (!drop) {
     const boss = state.boss;
     const hint = !boss
-      ? "No boss pulled. Pull a boss (a retro topic) to start the encounter."
+      ? "No problem pulled. Pull a boss (a problem to address) to start the encounter."
       : boss.slain
-        ? "Boss defeated. Pull the next boss, or end the encounter."
-        : "Boss is up. Attack by dropping loot — each drop you resolve damages it.";
+        ? "Problem addressed. Pull the next boss, or end the encounter."
+        : "Boss is up. Propose a remediation step above (or drop from the backlog) — each resolved drop damages it.";
     activeDropEl.className = "active-drop empty";
     activeDropEl.innerHTML = `<p class="empty-hint">${hint}</p>`;
     resolveBar.classList.add("hidden");
@@ -305,7 +342,10 @@ function renderParty() {
 }
 
 function renderLog() {
-  logCount.textContent = `${state.log.length} item${state.log.length === 1 ? "" : "s"} looted`;
+  const looted = state.log.filter((t) => !t.passedOver).length;
+  const passed = state.log.length - looted;
+  logCount.textContent =
+    `${looted} item${looted === 1 ? "" : "s"} looted` + (passed ? `, ${passed} passed over` : "");
   lootLogList.innerHTML = "";
   if (state.log.length === 0) {
     lootLogList.innerHTML = `<li class="muted" style="justify-content:center;">No loot distributed yet.</li>`;
@@ -314,13 +354,20 @@ function renderLog() {
   [...state.log].reverse().forEach((t) => {
     const r = RARITY[t.rarity];
     const li = document.createElement("li");
-    li.className = t.done ? "done" : "";
-    li.innerHTML = `
-      <span class="log-rarity-dot bg-${r.cls}"></span>
-      <input type="checkbox" data-task="${t.id}" ${t.done ? "checked" : ""}/>
-      <span class="log-name r-${r.cls}">${escapeHtml(t.name)}</span>
-      <span class="log-owner">&#128100; ${escapeHtml(t.ownerName)}</span>
-    `;
+    if (t.passedOver) {
+      li.className = "passed-over";
+      li.innerHTML = `
+        <span class="log-rarity-dot bg-${r.cls}"></span>
+        <span class="log-name r-${r.cls}">${escapeHtml(t.name)}</span>
+        <span class="log-owner log-passed">&#8856; passed over</span>`;
+    } else {
+      li.className = t.done ? "done" : "";
+      li.innerHTML = `
+        <span class="log-rarity-dot bg-${r.cls}"></span>
+        <input type="checkbox" data-task="${t.id}" ${t.done ? "checked" : ""}/>
+        <span class="log-name r-${r.cls}">${escapeHtml(t.name)}</span>
+        <span class="log-owner">&#128100; ${escapeHtml(t.ownerName)}</span>`;
+    }
     lootLogList.appendChild(li);
   });
 }
@@ -329,23 +376,67 @@ function renderLog() {
 
 /* ---------------- Boss encounter lifecycle ---------------- */
 
-function pullBoss(name, tier) {
+// Archive the active boss's identity + remediation plan so per-problem export
+// survives pulling the next boss or ending the encounter.
+function archiveBoss() {
+  const boss = state.boss;
+  if (!boss) return;
+  if (!state.bossLog) state.bossLog = [];
+  if (state.bossLog.some((b) => b.id === boss.id)) return;
+  state.bossLog.push({
+    id: boss.id,
+    name: boss.name,
+    desc: boss.desc || "",
+    tier: boss.tier,
+    slain: boss.slain,
+    remediation: boss.remediation || [],
+  });
+}
+
+function pullBoss(name, tier, desc) {
+  archiveBoss();
   const t = BOSS_TIERS[tier] ? tier : "elite";
   const hpMax = BOSS_TIERS[t].hp;
   state.boss = {
     id: uid(),
-    name: name.trim() || "Unnamed Topic",
+    name: name.trim() || "Unnamed Problem",
+    desc: (desc || "").trim(), // what the problem is / why it matters
     tier: t,
     hpMax,
     hp: hpMax,
     slain: false,
+    remediation: [], // [{ id, name, rarity, desc }] — the fix plan, authored live
   };
   state.activeDrop = null;
   state.lastResult = null;
   render();
 }
 
+/**
+ * Author a remediation step for the active boss and drop it on the table in a
+ * single action. The step is recorded on the boss's remediation plan (so the
+ * encounter owns its fix list) and becomes the active drop for Need/Greed/Pass.
+ * This is the primary way to attack a boss: turn discussion into an owned fix.
+ */
+function dropRemediationStep(name, rarity, desc) {
+  const boss = state.boss;
+  if (!boss || boss.slain) return;
+  if (!name.trim()) return;
+  const step = {
+    id: uid(),
+    name: name.trim(),
+    rarity: RARITY[rarity] ? rarity : "uncommon",
+    desc: (desc || "").trim(),
+  };
+  if (!Array.isArray(boss.remediation)) boss.remediation = []; // guard old saved state
+  boss.remediation.push(step);
+  // Also add it to the backlog (loot table) so it's reusable and visible there.
+  state.lootTable.push({ id: step.id, name: step.name, rarity: step.rarity, desc: step.desc });
+  dropItem(step);
+}
+
 function endBoss() {
+  archiveBoss();
   state.boss = null;
   state.activeDrop = null;
   state.lastResult = null;
@@ -445,7 +536,7 @@ function resolveDrop() {
     winnerContext,
   };
 
-  // Record the task if someone won it
+  // Record the task if someone won it; otherwise log it as passed over.
   if (winner) {
     state.log.push({
       id: uid(),
@@ -454,9 +545,24 @@ function resolveDrop() {
       ownerId: winner.memberId,
       ownerName: winner.name,
       bossId: state.boss ? state.boss.id : null,
+      stepId: drop.item.id || null, // ties an owned task back to its remediation step
+      passedOver: false,
       done: false,
     });
     showLootToast(drop.item.name, drop.item.rarity, winner.name);
+  } else {
+    // Nobody wanted it: keep a trace in the register that it was dropped on.
+    state.log.push({
+      id: uid(),
+      name: drop.item.name,
+      rarity: drop.item.rarity,
+      ownerId: null,
+      ownerName: "",
+      bossId: state.boss ? state.boss.id : null,
+      stepId: drop.item.id || null,
+      passedOver: true,
+      done: false,
+    });
   }
 
   // Damage the boss: a won drop lands a full hit, an all-pass only chips away.
@@ -675,16 +781,67 @@ function renderManualDropModal() {
 
 /* ---------------- Export ---------------- */
 
+// Build a markdown report grouped by problem (boss). Each problem lists its
+// remediation plan: owned steps become checklist items with an owner, and
+// steps nobody owned are noted as unowned proposals.
+function buildExport() {
+  // every boss we know about: archived ones plus the current one
+  const bosses = [...(state.bossLog || [])];
+  if (state.boss && !bosses.some((b) => b.id === state.boss.id)) {
+    bosses.push({
+      id: state.boss.id,
+      name: state.boss.name,
+      desc: state.boss.desc || "",
+      tier: state.boss.tier,
+      slain: state.boss.slain,
+      remediation: state.boss.remediation || [],
+    });
+  }
+
+  const tierLabel = (t) => (BOSS_TIERS[t] ? BOSS_TIERS[t].label : "Elite");
+  const ownedFor = (stepId) => state.log.find((t) => t.stepId === stepId && !t.passedOver);
+
+  const sections = bosses.map((b) => {
+    const header = `## ${b.name} — ${tierLabel(b.tier)}${b.slain ? " ✓ addressed" : ""}`;
+    const descLine = b.desc ? `\n_${b.desc}_\n` : "";
+    const steps = b.remediation || [];
+    if (steps.length === 0) {
+      return `${header}${descLine}\n_No remediation steps proposed._`;
+    }
+    const lines = steps.map((s) => {
+      const owned = ownedFor(s.id);
+      const rarity = RARITY[s.rarity] ? RARITY[s.rarity].label : "Uncommon";
+      if (owned) {
+        return `${owned.done ? "[x]" : "[ ]"} ${s.name} — ${rarity} — owner: ${owned.ownerName}`;
+      }
+      return `[ ] ${s.name} — ${rarity} — _(proposed, unowned)_`;
+    });
+    return `${header}${descLine}\n${lines.join("\n")}`;
+  });
+
+  // any looted tasks not tied to a known problem/step (e.g. backlog drops) go
+  // last; passed-over items are not actionable tasks, so exclude them
+  const orphans = state.log.filter((t) => {
+    if (t.passedOver) return false;
+    if (!t.stepId) return true;
+    return !bosses.some((b) => (b.remediation || []).some((s) => s.id === t.stepId));
+  });
+  if (orphans.length) {
+    const lines = orphans.map((t) =>
+      `${t.done ? "[x]" : "[ ]"} ${t.name} — ${RARITY[t.rarity].label} — owner: ${t.ownerName}`
+    );
+    sections.push(`## Other looted items\n\n${lines.join("\n")}`);
+  }
+
+  return `# Retro Remediation Plan\n\n${sections.join("\n\n")}\n`;
+}
+
 function exportTasks() {
   if (state.log.length === 0) {
     alert("No looted tasks to export yet.");
     return;
   }
-  const lines = state.log.map((t) => {
-    const status = t.done ? "[x]" : "[ ]";
-    return `${status} ${t.name} — ${RARITY[t.rarity].label} — owner: ${t.ownerName}`;
-  });
-  const text = `# Retro Action Items (Loot)\n\n${lines.join("\n")}\n`;
+  const text = buildExport();
   navigator.clipboard?.writeText(text).then(
     () => alert("Tasks copied to clipboard!\n\n" + text),
     () => downloadText("retro-loot-tasks.md", text)
@@ -713,8 +870,9 @@ function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 
 $("#btn-pull-boss").addEventListener("click", () => openModal("#modal-boss"));
 $("#btn-confirm-boss").addEventListener("click", () => {
-  pullBoss($("#boss-name").value, $("#boss-tier").value);
+  pullBoss($("#boss-name").value, $("#boss-tier").value, $("#boss-desc").value);
   $("#boss-name").value = "";
+  $("#boss-desc").value = "";
   closeModals();
 });
 $("#btn-end-boss").addEventListener("click", () => {
@@ -726,6 +884,13 @@ $("#btn-end-boss").addEventListener("click", () => {
 });
 $("#btn-drop-random").addEventListener("click", dropRandom);
 $("#btn-drop-manual").addEventListener("click", () => openModal("#modal-manual"));
+$("#btn-drop-step").addEventListener("click", () => {
+  dropRemediationStep($("#rc-name").value, $("#rc-rarity").value, $("#rc-desc").value);
+  $("#rc-name").value = "";
+  $("#rc-desc").value = "";
+});
+$("#rc-name").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#btn-drop-step").click(); });
+$("#rc-desc").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#btn-drop-step").click(); });
 $("#btn-resolve").addEventListener("click", resolveDrop);
 $("#btn-config").addEventListener("click", () => openModal("#modal-config"));
 $("#btn-roster").addEventListener("click", () => openModal("#modal-roster"));

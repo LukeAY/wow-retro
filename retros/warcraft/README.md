@@ -42,15 +42,21 @@ Then open:
 1. One person clicks **Create a room** — they become the **facilitator** and get
    a 4-letter room code.
 2. Everyone (including the facilitator) **creates their own character**: pick a
-   name, a race, and a class on the join screen. That becomes your own panel —
-   no need to wait for the host. Race and class selection follow **WoW: Forever**
-   rules (see below), and each panel shows a faction crest (Alliance / Horde).
+   character name, enter their **real name** (who's accountable for any loot
+   they win), and choose a race and class on the join screen. That becomes your
+   own panel — no need to wait for the host. Race and class selection follow
+   **WoW: Forever** rules (see below), and each panel shows a faction crest
+   (Alliance / Horde) plus the owner's real name. The real name also appears in
+   the loot log and the exported action-item list, so every task has a clear
+   owner. An **Accountability** panel summarizes who owns how many open vs. done
+   tasks, and hovering a party panel shows that person's details and workload.
 3. Facilitator **drops loot** (random or a specific item).
 4. Each player picks **Need / Greed / Pass** on their own screen. Others see only
    that a vote was cast, not what it was.
 5. Facilitator clicks **Roll & Resolve**. The server rolls, reveals every roll,
    and the winner gets a loot toast + the task.
-6. **Export Tasks** copies all looted action items as a markdown checklist.
+6. **Export Tasks** copies a markdown remediation plan **grouped by problem** —
+   each boss with its steps, owners, and done state as a checklist.
 
 Players make their own characters, so the host doesn't pre-build the roster. The
 **Party** panel is only needed for proxy slots (someone not online) or to kick /
@@ -120,32 +126,60 @@ say, a Night Elf Mage or a Tauren Paladin.
 To change the ruleset later, edit `RACE_CLASSES` / `FACTION` in
 `server/server.js` — the client picks up the new matrix automatically.
 
-## Boss encounters (how a topic is fought)
+## Boss encounters (a problem and its remediation plan)
 
-Each retro topic is a **boss** with a health pool. The facilitator **pulls a
-boss** by naming the topic and choosing a difficulty, then the party chips its
-health down by looting action items:
+Each **boss is a problem that needs addressing**, with a health pool. You bring
+the boss down by **proposing remediation steps** — concrete fixes authored live
+as the discussion produces them. Each step you resolve with Need / Greed / Pass
+is a drop that damages the boss, and the ones someone owns become assigned
+tasks. The boss carries its own **remediation plan**, so each problem leaves
+with its own list of fixes and owners.
 
-1. **Pull a boss.** Name the topic (e.g. "Flaky CI pipeline") and pick a
+1. **Pull a boss.** Name the problem (e.g. "Flaky CI pipeline"), add an optional
+   **description** so the room has context on what the problem is and why it
+   matters (it shows under the boss name and in the export), and pick a
    difficulty:
-   - **Trash mob** — a minor nitpick. 1 drop to kill.
-   - **Elite** — worth discussing. 2 drops to kill.
-   - **Raid boss** — a big systemic issue. 4 drops to kill.
-   Tougher bosses have more health, so you're expected to loot more (and
-   heavier) action items before they fall.
-2. **Attack.** While the boss is up, drop loot (random or specific) and resolve
-   it with Need / Greed / Pass as usual. Every resolved drop **damages the
-   boss**: an item someone wins lands a full hit, while a drop everyone passes
-   on only chips away (half a hit). A health bar drains as you go.
-3. **Boss defeated.** When health hits zero the boss is slain — a victory toast
-   fires (on everyone's screen in online mode) and the encounter shows how many
-   items the party looted from that topic. Pull the next boss, or **End
-   Encounter** to clear the stage.
+   - **Trash mob** — a minor nitpick. 1 step to kill.
+   - **Elite** — worth discussing. 2 steps to kill.
+   - **Raid boss** — a big systemic issue. 4 steps to kill.
+   Tougher bosses have more health, so you're expected to commit more (and
+   heavier) remediation steps before they fall.
+2. **Propose remediation steps (anyone).** While the boss is up, **any party
+   member** can type a fix into the inline composer (name + priority/rarity +
+   optional detail) and hit **Propose Step** — it joins the boss's remediation
+   plan as a suggestion, attributed to whoever proposed it. The **facilitator**
+   then drops a proposed step onto the table (the **Drop** button next to it)
+   when the room is ready, and you resolve it with Need / Greed / Pass. This
+   keeps brainstorming open to everyone while the facilitator still paces the
+   encounter — and you can't drop over a vote that's already in progress. Every
+   resolved step **damages the boss**: a step someone owns (wins) lands a full
+   hit, while a step everyone passes on only chips away (half a hit). A health
+   bar drains as you go, and the plan shows each step as *proposed*, *on the
+   table*, *owned* (with its owner), or *unowned*.
 
-In online mode the server owns the health math and the slain flag, so the bar
-can't be faked by a tampered client, and the boss (along with the rest of the
-room) survives server restarts. You can't drop loot without a live boss on the
-table.
+   (In single-screen local mode there are no separate players, so the composer
+   simply drops the step straight onto the shared screen.)
+3. **Problem addressed.** When health hits zero the boss is slain — a victory
+   toast fires (on everyone's screen in online mode) and the encounter shows how
+   many owned remediation steps the party committed. Pull the next boss, or
+   **End Encounter** to clear the stage. Past problems are archived so the export
+   can group everything per problem.
+
+The **loot table** is an optional **backlog**. A fresh room/session starts
+**empty** — you fill it by proposing steps (each proposed step is also added to
+the backlog, so it's reusable) or by adding items to the Loot Table directly.
+Use **Drop from Backlog** / **Pick from Backlog** to put an existing backlog
+item on the table instead of authoring a new step.
+
+Items that **everyone passes on** aren't lost: they're recorded in the Loot Log
+as **passed over** — no owner, not an actionable task, and they don't count
+toward the "items looted" total or anyone's accountability — so the register
+keeps a trace that the item was discussed and consciously dropped.
+
+In online mode the server owns the health math, the slain flag, and the
+remediation plan, so none of it can be faked by a tampered client, and the boss
+(along with the rest of the room) survives server restarts. You can't drop a
+step or backlog item without a live boss on the table.
 
 ## Loot rules (how Need / Greed / Pass resolves)
 

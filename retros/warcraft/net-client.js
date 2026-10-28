@@ -129,8 +129,8 @@ function onState(msg) {
     $("#btn-config").classList.add("hidden");
     $("#btn-roster").classList.add("hidden");
     $("#btn-export").classList.add("hidden");
-    renderRaceSelect();
     ensureValidClass();
+    renderRacePicker();
     renderClassPicker();
     return;
   }
@@ -153,32 +153,48 @@ function onState(msg) {
 let chosenRace = "Human";
 let chosenClass = "Warrior";
 
-// Build the race dropdown, grouped by faction, from the server matrix.
-function renderRaceSelect() {
-  const sel = $("#char-race");
-  if (sel.childElementCount > 0) return; // build once
+const FACTION_COLOR = { Alliance: "#3a7bd5", Horde: "#c8102e" };
+
+// Build the race picker as buttons, grouped by faction, from the server matrix.
+function renderRacePicker() {
+  const picker = $("#race-picker");
+  if (!picker) return;
   const byFaction = { Alliance: [], Horde: [] };
   Object.keys(RACE_CLASSES).forEach((race) => {
     (byFaction[FACTION[race]] || (byFaction[FACTION[race]] = [])).push(race);
   });
+
+  picker.innerHTML = "";
   ["Alliance", "Horde"].forEach((faction) => {
-    if (!byFaction[faction] || !byFaction[faction].length) return;
-    const group = document.createElement("optgroup");
-    group.label = faction;
-    byFaction[faction].forEach((race) => {
-      const o = document.createElement("option");
-      o.value = race; o.textContent = race;
-      group.appendChild(o);
+    const races = byFaction[faction];
+    if (!races || !races.length) return;
+    const color = FACTION_COLOR[faction] || "var(--gold)";
+
+    const group = document.createElement("div");
+    group.className = "race-group";
+    group.innerHTML = `<div class="race-group-label" style="--faction-color:${color}">${FACTION_CREST[faction] || ""} ${faction}</div>`;
+
+    const row = document.createElement("div");
+    row.className = "race-options";
+    races.forEach((race) => {
+      const btn = document.createElement("button");
+      btn.className = "race-option" + (race === chosenRace ? " active" : "");
+      btn.dataset.race = race;
+      btn.style.setProperty("--faction-color", color);
+      btn.innerHTML = `<span class="dot"></span><span>${race}</span>`;
+      row.appendChild(btn);
     });
-    sel.appendChild(group);
+    group.appendChild(row);
+    picker.appendChild(group);
   });
-  sel.value = chosenRace;
-  // keep the class picker valid whenever the race changes
-  sel.addEventListener("change", () => {
-    chosenRace = sel.value;
-    ensureValidClass();
-    renderClassPicker();
-  });
+}
+
+function selectRace(race) {
+  if (!RACE_CLASSES[race]) return;
+  chosenRace = race;
+  ensureValidClass();
+  renderRacePicker();
+  renderClassPicker();
 }
 
 // If the current class isn't legal for the chosen race, pick the first legal one.
@@ -212,13 +228,15 @@ function renderClassPicker() {
 function submitCharacter() {
   const name = $("#char-name").value.trim();
   if (!name) { $("#char-error").textContent = "Enter a character name."; return; }
+  const realName = $("#char-realname").value.trim();
+  if (!realName) { $("#char-error").textContent = "Enter your real name (for accountability)."; return; }
   ensureValidClass();
   if (!RACE_CLASSES[chosenRace] || !RACE_CLASSES[chosenRace].includes(chosenClass)) {
     $("#char-error").textContent = "Pick a valid race and class.";
     return;
   }
   $("#char-error").textContent = "";
-  send({ type: "createCharacter", name, cls: chosenClass, race: chosenRace });
+  send({ type: "createCharacter", name, realName, cls: chosenClass, race: chosenRace });
 }
 
 function render() {
@@ -230,8 +248,56 @@ function render() {
   renderResult();
   renderParty();
   renderLog();
+  renderAccountability();
   maybeToast();
   refreshOpenModals();
+}
+
+// Who owns how many open vs. done tasks (keyed by real name for accountability).
+function renderAccountability() {
+  const section = $("#accountability");
+  const list = $("#accountability-list");
+  if (!section || !list) return;
+
+  // tally per owner: key on real name when present, else character name
+  const byOwner = new Map();
+  view.log.forEach((t) => {
+    if (t.passedOver) return; // passed-over items have no owner and aren't tasks
+    const key = (t.ownerReal && t.ownerReal.trim()) ? t.ownerReal : t.ownerName;
+    if (!byOwner.has(key)) byOwner.set(key, { key, character: t.ownerName, open: 0, done: 0 });
+    const entry = byOwner.get(key);
+    if (t.done) entry.done++; else entry.open++;
+  });
+
+  if (byOwner.size === 0) { // nothing owned yet (empty, or only passed-over)
+    section.classList.add("hidden");
+    return;
+  }
+  section.classList.remove("hidden");
+
+  const rows = [...byOwner.values()].sort((a, b) => (b.open - a.open) || (b.open + b.done - a.open - a.done));
+  const totalOpen = rows.reduce((n, r) => n + r.open, 0);
+  $("#accountability-sub").textContent =
+    `${totalOpen} open across ${rows.length} ${rows.length === 1 ? "person" : "people"}`;
+
+  list.innerHTML = "";
+  rows.forEach((r) => {
+    const total = r.open + r.done;
+    const li = document.createElement("li");
+    li.className = "accountability-row" + (r.open === 0 ? " all-clear" : "");
+    // character hint only when the owner key is a real name distinct from character
+    const charHint = (r.key !== r.character) ? ` <span class="acc-char">as ${escapeHtml(r.character)}</span>` : "";
+    li.innerHTML = `
+      <span class="acc-name">&#128100; ${escapeHtml(r.key)}${charHint}</span>
+      <span class="acc-counts">
+        <span class="acc-open" title="Open tasks">${r.open} open</span>
+        <span class="acc-done" title="Completed tasks">${r.done} done</span>
+        <span class="acc-bar" aria-hidden="true">${
+          total ? `<span class="acc-bar-done" style="width:${Math.round((r.done / total) * 100)}%"></span>` : ""
+        }</span>
+      </span>`;
+    list.appendChild(li);
+  });
 }
 
 // Show the right facilitator stage buttons depending on boss state.
@@ -244,6 +310,9 @@ function renderStageControls() {
   $("#btn-drop-random").classList.toggle("hidden", !isFac || !fighting);
   $("#btn-drop-manual").classList.toggle("hidden", !isFac || !fighting);
   $("#btn-end-boss").classList.toggle("hidden", !isFac || !boss);
+  // ANYONE can propose a remediation step while a boss is up.
+  const composer = $("#remediation-composer");
+  if (composer) composer.classList.toggle("hidden", !fighting);
 }
 
 function renderBoss() {
@@ -252,7 +321,7 @@ function renderBoss() {
   if (!boss) { el.classList.add("hidden"); return; }
   const tier = BOSS_TIERS[boss.tier] || BOSS_TIERS.elite;
   const pct = Math.max(0, Math.round((boss.hp / boss.hpMax) * 100));
-  const looted = view.log.filter((t) => t.bossId === boss.id).length;
+  const looted = view.log.filter((t) => t.bossId === boss.id && !t.passedOver).length;
   el.classList.remove("hidden");
   el.className = "boss" + (boss.slain ? " slain" : "");
   el.style.setProperty("--boss-color", tier.color);
@@ -261,13 +330,70 @@ function renderBoss() {
       <div class="boss-name"><span class="skull">${boss.slain ? "&#9876;" : "&#128128;"}</span>${escapeHtml(boss.name)}</div>
       <div class="boss-tier">${tier.label}</div>
     </div>
+    ${boss.desc ? `<div class="boss-desc-text">${escapeHtml(boss.desc)}</div>` : ""}
     <div class="boss-hpwrap">
       <div class="boss-hp" style="width:${pct}%;"></div>
       <div class="boss-hptext">${boss.slain ? "DEFEATED" : `${pct}% HP`}</div>
     </div>
     ${boss.slain
-      ? `<div class="boss-slain-line">&#9733; Boss defeated! The party looted ${looted} item(s) from this topic.</div>`
-      : `<div class="boss-sub">Attack by dropping loot. Every resolved drop damages the boss — won items hit hardest.</div>`}`;
+      ? `<div class="boss-slain-line">&#9733; Problem addressed! The party committed ${looted} owned remediation step(s).</div>`
+      : `<div class="boss-sub">Propose remediation steps. Every resolved step damages the boss — owned fixes hit hardest.</div>`}
+    ${renderRemediationPlan(boss)}`;
+}
+
+// Render the boss's remediation plan: every step proposed for this problem,
+// flagged by whether it became an owned task (won) or was passed on.
+function renderRemediationPlan(boss) {
+  const steps = boss.remediation || [];
+  if (steps.length === 0) return "";
+  const isFac = view.you.role === "facilitator";
+  const activeStepId = view.activeDrop ? view.activeDrop.item.id : null;
+  const liveUnresolved = !!view.activeDrop && !view.resolved;
+
+  const rows = steps.map((s) => {
+    const r = RARITY[s.rarity] || RARITY.common;
+    const owned = view.log.find((t) => t.stepId === s.id && !t.passedOver);
+    const onTable = s.id === activeStepId;
+
+    // status: owned (won) > unowned (resolved pass) > on the table now > proposed
+    let statusCls, statusText;
+    if (owned) {
+      statusCls = "owned";
+      statusText = `&#128100; ${escapeHtml(owned.ownerReal || owned.ownerName)}`;
+    } else if (onTable) {
+      statusCls = "ontable";
+      statusText = view.resolved ? "unowned" : "on the table";
+    } else if (s.dropped) {
+      statusCls = "unowned";
+      statusText = "unowned";
+    } else {
+      statusCls = "proposed";
+      const who = s.proposedReal || s.proposedBy || "";
+      statusText = who ? `proposed by ${escapeHtml(who)}` : "proposed";
+    }
+
+    // facilitator gets a Drop button for steps not yet dropped (and not blocked
+    // by a live unresolved drop)
+    const dropBtn = (isFac && !s.dropped)
+      ? `<button class="btn btn-gold rem-drop" data-drop-step="${s.id}" ${liveUnresolved ? "disabled title='Resolve the current drop first'" : ""}>Drop</button>`
+      : "";
+
+    return `
+      <li class="rem-step ${statusCls}">
+        <span class="log-rarity-dot bg-${r.cls}"></span>
+        <span class="rem-name r-${r.cls}">${escapeHtml(s.name)}</span>
+        <span class="rem-status">${statusText}</span>
+        ${dropBtn}
+      </li>`;
+  }).join("");
+
+  const pending = steps.filter((s) => !s.dropped).length;
+  const sub = pending ? ` &mdash; ${pending} awaiting a drop` : "";
+  return `
+    <div class="rem-plan">
+      <div class="rem-plan-head">Remediation plan &mdash; ${steps.length} step(s) proposed${sub}</div>
+      <ul class="rem-plan-list">${rows}</ul>
+    </div>`;
 }
 
 // keep any open facilitator modal in sync with live state
@@ -285,11 +411,13 @@ function renderActiveDrop() {
     const isFac = view.you.role === "facilitator";
     let hint;
     if (!boss) {
-      hint = isFac ? "No boss pulled. Pull a boss (a retro topic) to start the encounter." : "No boss pulled yet. Waiting for the facilitator…";
+      hint = isFac ? "No problem pulled. Pull a boss (a problem to address) to start the encounter." : "No problem pulled yet. Waiting for the facilitator…";
     } else if (boss.slain) {
-      hint = isFac ? "Boss defeated. Pull the next boss, or end the encounter." : "Boss defeated. Waiting for the facilitator…";
+      hint = isFac ? "Problem addressed. Pull the next boss, or end the encounter." : "Problem addressed. Waiting for the facilitator…";
     } else {
-      hint = isFac ? "Boss is up. Attack by dropping loot — each drop you resolve damages it." : "Boss is up. Waiting for the facilitator to drop loot…";
+      hint = isFac
+        ? "Boss is up. Anyone can propose remediation steps; drop one from the plan below (or from the backlog) to put it up for a roll."
+        : "Boss is up. Propose a remediation step above — the facilitator drops proposed steps for the roll.";
     }
     el.className = "active-drop empty";
     el.innerHTML = `<p class="empty-hint">${hint}</p>`;
@@ -351,15 +479,17 @@ function renderResult() {
 
   let headline;
   if (res.winnerId) {
-    headline = `<span class="r-${r.cls}">${escapeHtml(res.winnerName)}</span> wins
+    const who = res.winnerReal ? ` <span class="real-name">(${escapeHtml(res.winnerReal)})</span>` : "";
+    headline = `<span class="r-${r.cls}">${escapeHtml(res.winnerName)}</span>${who} wins
       <b class="r-${r.cls}">${escapeHtml(res.itemName)}</b> by <b>${res.winnerContext}</b> roll!`;
   } else {
     headline = `Everyone passed on <b class="r-${r.cls}">${escapeHtml(res.itemName)}</b>. Unclaimed.`;
   }
   const rows = res.rolls.map((rw) => {
     const win = rw.memberId === res.winnerId ? ` <span class="win-tag">&#9733; WIN</span>` : "";
+    const who = rw.realName ? ` <span class="real-name">(${escapeHtml(rw.realName)})</span>` : "";
     const txt = rw.choice === "pass" ? "passed" : `${cap(rw.choice)} &mdash; rolled <b>${rw.roll}</b>`;
-    return `<div class="roll-row">${escapeHtml(rw.name)}: ${txt}${win}</div>`;
+    return `<div class="roll-row">${escapeHtml(rw.name)}${who}: ${txt}${win}</div>`;
   }).join("");
   el.innerHTML = `<div class="winner-line">${headline}</div><div class="roll-detail">${rows}</div>`;
 }
@@ -397,6 +527,18 @@ function renderParty() {
       : (mine ? `<div class="muted" style="font-size:11px;text-align:center;">This is you</div>` : "");
 
     const myTasks = view.log.filter((t) => t.ownerId === m.id);
+    const openCount = myTasks.filter((t) => !t.done).length;
+    const doneCount = myTasks.length - openCount;
+
+    // hover tooltip: who this is + their loot workload
+    const tipParts = [
+      m.name,
+      m.realName ? `Real name: ${m.realName}` : null,
+      `${(m.race ? m.race + " " : "")}${m.cls}`,
+      m.faction || null,
+      `Loot: ${openCount} open, ${doneCount} done`,
+    ].filter(Boolean);
+    panel.title = tipParts.join(" \u2022 ");
 
     const crest = m.faction
       ? `<span class="faction-crest crest-${m.faction.toLowerCase()}" title="${m.faction}">${FACTION_CREST[m.faction] || ""}</span>`
@@ -408,6 +550,7 @@ function renderParty() {
         <div class="member-headtext">
           <div class="member-name">${crest}${escapeHtml(m.name)}${mine ? " &#9733;" : ""}</div>
           <div class="member-class">${escapeHtml((m.race ? m.race + " " : "") + m.cls)}</div>
+          ${m.realName ? `<div class="member-real">&#128100; ${escapeHtml(m.realName)}</div>` : ""}
         </div>
       </div>
       <div class="member-roll">${status}</div>
@@ -424,7 +567,10 @@ function renderParty() {
 }
 
 function renderLog() {
-  $("#log-count").textContent = `${view.log.length} item${view.log.length === 1 ? "" : "s"} looted`;
+  const looted = view.log.filter((t) => !t.passedOver).length;
+  const passed = view.log.length - looted;
+  $("#log-count").textContent =
+    `${looted} item${looted === 1 ? "" : "s"} looted` + (passed ? `, ${passed} passed over` : "");
   const list = $("#loot-log-list");
   list.innerHTML = "";
   if (view.log.length === 0) {
@@ -434,12 +580,21 @@ function renderLog() {
   [...view.log].reverse().forEach((t) => {
     const r = RARITY[t.rarity];
     const li = document.createElement("li");
-    li.className = t.done ? "done" : "";
-    li.innerHTML = `
-      <span class="log-rarity-dot bg-${r.cls}"></span>
-      <input type="checkbox" data-task="${t.id}" ${t.done ? "checked" : ""}/>
-      <span class="log-name r-${r.cls}">${escapeHtml(t.name)}</span>
-      <span class="log-owner">&#128100; ${escapeHtml(t.ownerName)}</span>`;
+    if (t.passedOver) {
+      // no owner, not a task — just a record that it was dropped on
+      li.className = "passed-over";
+      li.innerHTML = `
+        <span class="log-rarity-dot bg-${r.cls}"></span>
+        <span class="log-name r-${r.cls}">${escapeHtml(t.name)}</span>
+        <span class="log-owner log-passed">&#8856; passed over</span>`;
+    } else {
+      li.className = t.done ? "done" : "";
+      li.innerHTML = `
+        <span class="log-rarity-dot bg-${r.cls}"></span>
+        <input type="checkbox" data-task="${t.id}" ${t.done ? "checked" : ""}/>
+        <span class="log-name r-${r.cls}">${escapeHtml(t.name)}</span>
+        <span class="log-owner">&#128100; ${escapeHtml(t.ownerReal || t.ownerName)}${t.ownerReal ? ` <span class="log-char">as ${escapeHtml(t.ownerName)}</span>` : ""}</span>`;
+    }
     list.appendChild(li);
   });
 }
@@ -465,7 +620,7 @@ function showBossToast(boss) {
   const stack = $("#toast-stack");
   if (!stack) return;
   const tier = BOSS_TIERS[boss.tier] || BOSS_TIERS.elite;
-  const looted = view.log.filter((t) => t.bossId === boss.id).length;
+  const looted = view.log.filter((t) => t.bossId === boss.id && !t.passedOver).length;
   const toast = document.createElement("div");
   toast.className = "loot-toast t-legendary";
   toast.innerHTML = `
@@ -611,10 +766,52 @@ function renderManualDropModal() {
 }
 
 /* ---------------- Export ---------------- */
+// Build a markdown report grouped by problem (boss): each problem lists its
+// remediation plan, with owned steps as owned checklist items and unowned
+// steps noted as proposals.
+function buildExport() {
+  const bosses = [...(view.bossLog || [])];
+  if (view.boss && !bosses.some((b) => b.id === view.boss.id)) {
+    bosses.push({
+      id: view.boss.id, name: view.boss.name, desc: view.boss.desc || "", tier: view.boss.tier,
+      slain: view.boss.slain, remediation: view.boss.remediation || [],
+    });
+  }
+  const tierLabel = (t) => (BOSS_TIERS[t] ? BOSS_TIERS[t].label : "Elite");
+  const ownedFor = (stepId) => view.log.find((t) => t.stepId === stepId && !t.passedOver);
+  const ownerStr = (t) => (t.ownerReal ? `${t.ownerReal} (${t.ownerName})` : t.ownerName);
+
+  const sections = bosses.map((b) => {
+    const header = `## ${b.name} — ${tierLabel(b.tier)}${b.slain ? " ✓ addressed" : ""}`;
+    const descLine = b.desc ? `\n_${b.desc}_\n` : "";
+    const steps = b.remediation || [];
+    if (steps.length === 0) return `${header}${descLine}\n_No remediation steps proposed._`;
+    const lines = steps.map((s) => {
+      const owned = ownedFor(s.id);
+      const rarity = RARITY[s.rarity] ? RARITY[s.rarity].label : "Uncommon";
+      return owned
+        ? `${owned.done ? "[x]" : "[ ]"} ${s.name} — ${rarity} — owner: ${ownerStr(owned)}`
+        : `[ ] ${s.name} — ${rarity} — _(proposed, unowned)_`;
+    });
+    return `${header}${descLine}\n${lines.join("\n")}`;
+  });
+
+  const orphans = view.log.filter((t) =>
+    !t.passedOver &&
+    (!t.stepId || !bosses.some((b) => (b.remediation || []).some((s) => s.id === t.stepId)))
+  );
+  if (orphans.length) {
+    const lines = orphans.map((t) =>
+      `${t.done ? "[x]" : "[ ]"} ${t.name} — ${RARITY[t.rarity].label} — owner: ${ownerStr(t)}`
+    );
+    sections.push(`## Other looted items\n\n${lines.join("\n")}`);
+  }
+  return `# Retro Remediation Plan\n\n${sections.join("\n\n")}\n`;
+}
+
 function exportTasks() {
   if (!view || view.log.length === 0) { alert("No looted tasks to export yet."); return; }
-  const lines = view.log.map((t) => `${t.done ? "[x]" : "[ ]"} ${t.name} — ${RARITY[t.rarity].label} — owner: ${t.ownerName}`);
-  const text = `# Retro Action Items (Loot)\n\n${lines.join("\n")}\n`;
+  const text = buildExport();
   navigator.clipboard?.writeText(text).then(
     () => alert("Tasks copied to clipboard!\n\n" + text),
     () => downloadText("retro-loot-tasks.md", text)
@@ -651,11 +848,13 @@ $("#btn-leave").addEventListener("click", () => {
 
 $("#btn-create-char").addEventListener("click", submitCharacter);
 $("#char-name").addEventListener("keydown", (e) => { if (e.key === "Enter") submitCharacter(); });
+$("#char-realname").addEventListener("keydown", (e) => { if (e.key === "Enter") submitCharacter(); });
 
 $("#btn-pull-boss").addEventListener("click", () => openModal("#modal-boss"));
 $("#btn-confirm-boss").addEventListener("click", () => {
-  send({ type: "pullBoss", name: $("#boss-name").value, tier: $("#boss-tier").value });
+  send({ type: "pullBoss", name: $("#boss-name").value, desc: $("#boss-desc").value, tier: $("#boss-tier").value });
   $("#boss-name").value = "";
+  $("#boss-desc").value = "";
   closeModals();
 });
 $("#boss-name").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#btn-confirm-boss").click(); });
@@ -668,6 +867,12 @@ $("#btn-end-boss").addEventListener("click", () => {
 });
 $("#btn-drop-random").addEventListener("click", () => send({ type: "drop" }));
 $("#btn-drop-manual").addEventListener("click", () => openModal("#modal-manual"));
+$("#btn-drop-step").addEventListener("click", () => {
+  send({ type: "proposeStep", name: $("#rc-name").value, rarity: $("#rc-rarity").value, desc: $("#rc-desc").value });
+  $("#rc-name").value = ""; $("#rc-desc").value = "";
+});
+$("#rc-name").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#btn-drop-step").click(); });
+$("#rc-desc").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#btn-drop-step").click(); });
 $("#btn-resolve").addEventListener("click", () => send({ type: "resolve" }));
 $("#btn-config").addEventListener("click", () => openModal("#modal-config"));
 $("#btn-roster").addEventListener("click", () => openModal("#modal-roster"));
@@ -685,6 +890,8 @@ $("#btn-add-member").addEventListener("click", () => {
 document.addEventListener("click", (e) => {
   const t = e.target;
   if (t.matches("[data-close]") || t.classList.contains("modal")) { closeModals(); return; }
+  const raceOpt = t.closest && t.closest(".race-option");
+  if (raceOpt) { selectRace(raceOpt.dataset.race); return; }
   const classOpt = t.closest && t.closest(".class-option");
   if (classOpt) { chosenClass = classOpt.dataset.cls; renderClassPicker(); return; }
   if (t.matches("[data-mychoice]")) { if (!t.disabled) send({ type: "setChoice", choice: t.getAttribute("data-mychoice") }); return; }
@@ -702,6 +909,7 @@ document.addEventListener("click", (e) => {
     return;
   }
   if (t.matches("[data-drop-loot]")) { send({ type: "drop", lootId: t.getAttribute("data-drop-loot") }); closeModals(); return; }
+  if (t.matches("[data-drop-step]")) { if (!t.disabled) send({ type: "dropStep", stepId: t.getAttribute("data-drop-step") }); return; }
 });
 
 document.addEventListener("change", (e) => {
