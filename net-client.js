@@ -43,7 +43,7 @@ const CLASSES = {
 };
 
 // Faction crests (icons come from icons.js).
-const FACTION_CREST = { Alliance: icon("shield"), Horde: icon("swords") };
+const FACTION_CREST = { Alliance: factionIcon("Alliance"), Horde: factionIcon("Horde") };
 
 // Race/class matrix + faction map — populated from the server's `meta` message
 // so the client never diverges from the authoritative WoW: Forever rules.
@@ -62,6 +62,7 @@ let lastPulledBossId = null;  // so we only toast a given boss pull once
 // Rooms this tab has finished scouting, so a refresh doesn't re-show the screen.
 const SCOUTED_KEY = "wow-retro-scouted-rooms";
 const scoutedThisTab = new Set();
+const scoutDecided = new Set(); // rooms where we've checked whether to scout
 function hasScouted(room) {
   try { return JSON.parse(sessionStorage.getItem(SCOUTED_KEY) || "[]").includes(room); }
   catch { return false; }
@@ -140,14 +141,21 @@ function onState(msg) {
   const hasCharacter = !!msg.you.memberId;
 
   // Before the game: character creation, then scouting topics for the mob list.
-  const scouting = hasCharacter && !scoutedThisTab.has(msg.room) && !hasScouted(msg.room);
+  // Arriving in a room that's already under way (a boss has been pulled) skips
+  // scouting; the Mob List button still lets you add topics. Checked only on
+  // arrival, so a pull doesn't yank someone out of the screen mid-scout.
+  if (hasCharacter && !scoutDecided.has(msg.room)) {
+    scoutDecided.add(msg.room);
+    if (msg.boss || (msg.bossLog || []).length) markScouted(msg.room);
+  }
+  const scouting =hasCharacter && !scoutedThisTab.has(msg.room) && !hasScouted(msg.room);
   if (!hasCharacter || scouting) {
     $("#create-char").classList.toggle("hidden", hasCharacter);
     $("#scout").classList.toggle("hidden", !scouting);
     $("#game").classList.add("hidden");
     ["#btn-mobs", "#btn-config", "#btn-roster", "#btn-export"].forEach((b) => $(b).classList.add("hidden"));
     if (scouting) renderMobLists();
-    else { ensureValidClass(); renderRacePicker(); renderClassPicker(); }
+    else { renderReclaim(); ensureValidClass(); renderFactionPicker(); renderRacePicker(); renderClassPicker(); }
     return;
   }
 
@@ -168,49 +176,68 @@ function onState(msg) {
 }
 
 /* ---------------- Character creation ---------------- */
+
+// Open characters (nobody connected to them) that a returning player can take back.
+function renderReclaim() {
+  const open = view.members.filter((m) => !m.claimed);
+  $("#reclaim").classList.toggle("hidden", open.length === 0);
+  $("#reclaim-list").innerHTML = open.map((m) => {
+    const tasks = view.log.filter((t) => t.ownerId === m.id && !t.passedOver && !t.done).length;
+    return `
+      <button class="reclaim-option" data-reclaim="${m.id}" style="--member-color:${CLASSES[m.cls] || "#c8aa6e"}">
+        <span class="member-avatar">${raceIcon(m.race) || escapeHtml(m.name.slice(0, 2).toUpperCase())}</span>
+        <span class="reclaim-text">
+          <span class="reclaim-name">${escapeHtml(m.name)}</span>
+          <span class="reclaim-sub">${escapeHtml(`${m.race} ${m.cls}`)}${m.realName ? ` &middot; ${escapeHtml(m.realName)}` : ""}</span>
+          <span class="reclaim-sub">${plural(tasks, "open task", "open tasks")}</span>
+        </span>
+      </button>`;
+  }).join("");
+}
 let chosenRace = "Human";
 let chosenClass = "Warrior";
 
 const FACTION_COLOR = { Alliance: "#3a7bd5", Horde: "#c8102e" };
 
-// Build the race picker as buttons, grouped by faction, from the server matrix.
+// Step 1: the two factions, as large crest cards.
+function renderFactionPicker() {
+  const picker = $("#faction-picker");
+  const chosen = FACTION[chosenRace];
+  picker.innerHTML = ["Alliance", "Horde"].map((f) => `
+    <button class="faction-option${f === chosen ? " active" : ""}" data-faction="${f}" style="--faction-color:${FACTION_COLOR[f]}">
+      ${factionIcon(f, "faction-icon")}
+      <span class="pick-label">${f}</span>
+    </button>`).join("");
+}
+
+// Step 2: only the chosen faction's races, from the server matrix.
 function renderRacePicker() {
   const picker = $("#race-picker");
   if (!picker) return;
-  const byFaction = { Alliance: [], Horde: [] };
-  Object.keys(RACE_CLASSES).forEach((race) => {
-    (byFaction[FACTION[race]] || (byFaction[FACTION[race]] = [])).push(race);
-  });
+  const faction = FACTION[chosenRace];
+  const color = FACTION_COLOR[faction] || "var(--gold)";
+  picker.innerHTML = Object.keys(RACE_CLASSES)
+    .filter((race) => FACTION[race] === faction)
+    .map((race) => `
+      <button class="race-option${race === chosenRace ? " active" : ""}" data-race="${race}" style="--faction-color:${color}">
+        ${raceIcon(race) || `<span class="dot"></span>`}
+        <span class="pick-label">${race}</span>
+      </button>`).join("");
+}
 
-  picker.innerHTML = "";
-  ["Alliance", "Horde"].forEach((faction) => {
-    const races = byFaction[faction];
-    if (!races || !races.length) return;
-    const color = FACTION_COLOR[faction] || "var(--gold)";
-
-    const group = document.createElement("div");
-    group.className = "race-group";
-    group.innerHTML = `<div class="race-group-label" style="--faction-color:${color}">${FACTION_CREST[faction] || ""} ${faction}</div>`;
-
-    const row = document.createElement("div");
-    row.className = "race-options";
-    races.forEach((race) => {
-      const btn = document.createElement("button");
-      btn.className = "race-option" + (race === chosenRace ? " active" : "");
-      btn.dataset.race = race;
-      btn.style.setProperty("--faction-color", color);
-      btn.innerHTML = `${raceIcon(race) || `<span class="dot"></span>`}<span>${race}</span>`;
-      row.appendChild(btn);
-    });
-    group.appendChild(row);
-    picker.appendChild(group);
-  });
+// Switching faction moves you to its first race (and a class that race allows).
+function selectFaction(faction) {
+  if (FACTION[chosenRace] === faction) return;
+  const race = Object.keys(RACE_CLASSES).find((r) => FACTION[r] === faction);
+  if (!race) return;
+  selectRace(race);
 }
 
 function selectRace(race) {
   if (!RACE_CLASSES[race]) return;
   chosenRace = race;
   ensureValidClass();
+  renderFactionPicker();
   renderRacePicker();
   renderClassPicker();
 }
@@ -232,15 +259,9 @@ function renderClassPicker() {
     btn.className = "class-option" + (name === chosenClass ? " active" : "");
     btn.dataset.cls = name;
     btn.style.setProperty("--class-color", color);
-    btn.innerHTML = `<span class="dot"></span><span>${name}</span>`;
+    btn.innerHTML = `${classIcon(name) || `<span class="dot"></span>`}<span class="pick-label">${name}</span>`;
     picker.appendChild(btn);
   });
-  // show which faction this race belongs to
-  const hint = $("#faction-hint");
-  if (hint) {
-    const f = FACTION[chosenRace];
-    hint.innerHTML = f ? `${FACTION_CREST[f]} ${f}` : "";
-  }
 }
 
 function submitCharacter() {
@@ -565,7 +586,7 @@ function renderParty() {
 
     // hover tooltip: who this is + their loot workload
     const tipParts = [
-      m.name,
+      m.name + (m.isHost ? " (Host)" : ""),
       m.realName ? `Real name: ${m.realName}` : null,
       `${(m.race ? m.race + " " : "")}${m.cls}`,
       m.faction || null,
@@ -582,7 +603,7 @@ function renderParty() {
       <div class="member-head">
         <div class="member-avatar">${raceIcon(m.race) || escapeHtml(initials)}</div>
         <div class="member-headtext">
-          <div class="member-name">${crest}${escapeHtml(m.name)}${mine ? " &#9733;" : ""}</div>
+          <div class="member-name">${crest}${escapeHtml(m.name)}${m.isHost ? hostCrown() : ""}${mine ? youStar() : ""}</div>
           <div class="member-class">${escapeHtml((m.race ? m.race + " " : "") + m.cls)}</div>
           ${m.realName ? `<div class="member-real">${icon("person")} ${escapeHtml(m.realName)}</div>` : ""}
         </div>
@@ -838,14 +859,17 @@ function renderRosterModal() {
   view.members.forEach((m) => {
     const color = CLASSES[m.cls] || "#c8aa6e";
     const li = document.createElement("li");
-    const statusWord = m.claimed ? (m.connected ? "claimed" : "away") : "open";
-    const mgmt = m.claimed
+    const statusWord = m.id === view.you.memberId ? "you"
+      : m.claimed ? (m.connected ? "claimed" : "away") : "open";
+    // Host controls only apply to other players' slots, never your own.
+    const isMe = m.id === view.you.memberId;
+    const mgmt = m.claimed && !isMe
       ? `<button class="btn btn-ghost li-drop" data-kick="${m.id}" title="Free this slot">Kick</button>
          <button class="btn btn-ghost li-drop" data-reassign="${m.id}" title="Make this player the facilitator">Make host</button>`
       : "";
     li.innerHTML = `
       <span class="log-rarity-dot" style="background:${color}"></span>
-      <span class="li-name">${escapeHtml(m.name)}</span>
+      <span class="li-name">${escapeHtml(m.name)}${m.isHost ? hostCrown() : ""}</span>
       <span class="li-sub">${escapeHtml(m.cls)} &middot; ${statusWord}</span>
       ${mgmt}
       <button class="li-remove" data-remove-member="${m.id}" title="Remove slot">&times;</button>`;
@@ -942,6 +966,14 @@ function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 }
 function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+// Gold crown marking the host (facilitator) next to their character name.
+function hostCrown() {
+  return `<span class="host-crown" title="Host: runs the session, pulling bosses, dropping loot and resolving rolls" aria-label="Host">${icon("crown")}</span>`;
+}
+// Star marking your own character, so you can find yourself in the party.
+function youStar() {
+  return `<span class="you-star" title="This is you" aria-label="You">&#9733;</span>`;
+}
 function plural(n, one, many) { return `${n} ${n === 1 ? one : many}`; }
 // "Dealt N damage" under a resolved drop, or nothing if no live boss was hit.
 function damageLine(res) {
@@ -1026,6 +1058,10 @@ $("#btn-add-member").addEventListener("click", () => {
 document.addEventListener("click", (e) => {
   const t = e.target;
   if (t.matches("[data-close]") || t.classList.contains("modal")) { closeModals(); return; }
+  const reclaim = t.closest && t.closest("[data-reclaim]");
+  if (reclaim) { send({ type: "claimMember", memberId: reclaim.dataset.reclaim }); return; }
+  const factionOpt = t.closest && t.closest(".faction-option");
+  if (factionOpt) { selectFaction(factionOpt.dataset.faction); return; }
   const raceOpt = t.closest && t.closest(".race-option");
   if (raceOpt) { selectRace(raceOpt.dataset.race); return; }
   const classOpt = t.closest && t.closest(".class-option");
@@ -1054,6 +1090,22 @@ document.addEventListener("click", (e) => {
 document.addEventListener("change", (e) => {
   if (e.target.matches("[data-task]")) send({ type: "toggleTask", taskId: e.target.getAttribute("data-task") });
 });
+
+// The step composer can be collapsed to a slim bar during a fight; clicking the
+// bar reopens it. Each viewer's choice is remembered in this browser.
+const RC_COLLAPSED_KEY = "wow-retro-composer-collapsed";
+function setComposerCollapsed(collapsed) {
+  const el = $("#remediation-composer");
+  el.classList.toggle("collapsed", collapsed);
+  el.querySelector("[data-rc-toggle]").setAttribute("aria-expanded", String(!collapsed));
+  try { localStorage.setItem(RC_COLLAPSED_KEY, collapsed ? "1" : "0"); } catch { /* not remembered */ }
+}
+$("[data-rc-toggle]").addEventListener("click", () => {
+  const collapsed = !$("#remediation-composer").classList.contains("collapsed");
+  setComposerCollapsed(collapsed);
+  if (!collapsed) $("#rc-name").focus();
+});
+try { setComposerCollapsed(localStorage.getItem(RC_COLLAPSED_KEY) === "1"); } catch { /* start open */ }
 
 /* ---------------- Boot ---------------- */
 connect();

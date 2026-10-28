@@ -44,6 +44,14 @@
   <main id="create-char" class="layout hidden">
     <section class="card">
       <div class="section-head"><h2>Create Your Character</h2></div>
+
+      <!-- Characters in this room nobody is playing right now (e.g. you dropped) -->
+      <div id="reclaim" class="reclaim hidden">
+        <h3 class="reclaim-title">Returning? Reclaim your character</h3>
+        <div id="reclaim-list" class="reclaim-list"></div>
+        <div class="reclaim-or muted">or create a new one</div>
+      </div>
+
       <p class="muted">Pick a name and class. This becomes your own panel &mdash; no need to wait for the host.</p>
 
       <label class="muted" style="display:block;margin:16px 0 6px;">Character name</label>
@@ -54,13 +62,14 @@
       <input id="char-realname" type="text" maxlength="40" placeholder="e.g. Alex Chen"
         style="font:inherit;padding:10px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-2);color:var(--text);width:min(320px,100%);" />
 
-      <label class="muted" style="display:block;margin:18px 0 6px;">Race</label>
+      <div class="pick-step"><span class="pick-num">1</span> Choose your faction</div>
+      <div id="faction-picker" class="faction-picker"></div>
+
+      <div class="pick-step"><span class="pick-num">2</span> Choose your race</div>
       <div id="race-picker" class="race-picker"></div>
 
-      <label class="muted" style="display:block;margin:18px 0 6px;">
-        Class <span id="faction-hint" class="faction-hint"></span>
-      </label>
-      <p class="muted" style="font-size:12px;margin:0 0 8px;">Only classes your race can be (WoW: Forever rules) are shown.</p>
+      <div class="pick-step"><span class="pick-num">3</span> Choose your class</div>
+      <p class="muted" style="font-size:12px;margin:-4px 0 10px;">Only classes your race can be (WoW: Forever rules) are shown.</p>
       <div id="class-picker" class="class-picker"></div>
 
       <div style="margin-top:20px;">
@@ -114,21 +123,26 @@
 
       <!-- Inline remediation-step composer (facilitator-only, boss up). -->
       <div id="remediation-composer" class="remediation-composer hidden">
-        <div class="rc-head"><span data-icon="swords"></span> Call a strategy &mdash; anyone in the group can propose a remediation step</div>
-        <div class="add-form">
-          <input id="rc-name" type="text" placeholder="e.g. Add a retry around the flaky network call" />
-          <select id="rc-rarity" title="How much this step matters (priority)">
-            <option value="poor">Poor (trivial) &middot; 15 dmg</option>
-            <option value="common">Common (low) &middot; 30 dmg</option>
-            <option value="uncommon" selected>Uncommon (medium) &middot; 50 dmg</option>
-            <option value="rare">Rare (high) &middot; 80 dmg</option>
-            <option value="epic">Epic (critical) &middot; 120 dmg</option>
-            <option value="legendary">Legendary (top) &middot; 200 dmg</option>
-          </select>
-          <input id="rc-desc" type="text" placeholder="Detail (optional)" />
-          <button id="btn-drop-step" class="btn btn-primary">Propose Step</button>
+        <button class="rc-head" data-rc-toggle aria-expanded="true" aria-controls="rc-body" title="Show or hide the step composer">
+          <span><span data-icon="swords"></span> Call a strategy &mdash; anyone in the group can propose a remediation step</span>
+          <span class="rc-toggle-label"></span>
+        </button>
+        <div id="rc-body" class="rc-body">
+          <div class="add-form">
+            <input id="rc-name" type="text" placeholder="e.g. Add a retry around the flaky network call" />
+            <select id="rc-rarity" title="How much this step matters (priority)">
+              <option value="poor">Poor (trivial) &middot; 15 dmg</option>
+              <option value="common">Common (low) &middot; 30 dmg</option>
+              <option value="uncommon" selected>Uncommon (medium) &middot; 50 dmg</option>
+              <option value="rare">Rare (high) &middot; 80 dmg</option>
+              <option value="epic">Epic (critical) &middot; 120 dmg</option>
+              <option value="legendary">Legendary (top) &middot; 200 dmg</option>
+            </select>
+            <input id="rc-desc" type="text" placeholder="Detail (optional)" />
+            <button id="btn-drop-step" class="btn btn-primary">Propose Step</button>
+          </div>
+          <p class="rc-hint muted">Adds it to this boss's remediation plan. The facilitator drops proposed steps onto the table for Need / Greed / Pass when the room is ready.</p>
         </div>
-        <p class="rc-hint muted">Adds it to this boss's remediation plan. The facilitator drops proposed steps onto the table for Need / Greed / Pass when the room is ready.</p>
       </div>
 
       <div id="active-drop" class="active-drop empty">

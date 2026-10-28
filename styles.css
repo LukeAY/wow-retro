@@ -335,6 +335,15 @@ h1, h2, h3 {
   font-size: 15px;
   color: color-mix(in srgb, var(--member-color, var(--gold)) 85%, #fff);
 }
+.host-crown {
+  display: inline-block;
+  margin-left: 6px;
+  color: var(--wow-yellow);
+  filter: drop-shadow(0 0 4px rgba(255, 209, 0, .55));
+}
+.you-star { margin-left: 6px; cursor: help; }
+.host-crown { cursor: help; }
+.host-crown .ui-icon { width: 1.1em; height: 1.1em; vertical-align: -0.15em; }
 .member-class { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
 
 .choice-row { display: flex; gap: 6px; }
@@ -657,85 +666,100 @@ h1, h2, h3 {
   .loot-toast::after { display: none; }
 }
 
-/* ---------- Character creation class picker ---------- */
-.class-picker {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 8px;
-  max-width: 640px;
-}
-.class-option {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: 3px;
+/* Reclaim a dropped character, shown above character creation */
+.reclaim { margin: 14px 0 22px; }
+.reclaim-title { font-size: 15px; color: var(--wow-yellow); margin: 0 0 10px; }
+.reclaim-list { display: flex; flex-wrap: wrap; gap: 10px; }
+.reclaim-option {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 14px 8px 8px;
+  background: var(--bg-2);
   border: 1px solid var(--border);
-  background: var(--panel-2);
+  border-left: 3px solid var(--member-color);
+  border-radius: 3px;
   color: var(--text);
-  cursor: pointer;
   font: inherit;
-  font-size: 14px;
   text-align: left;
-  transition: all .12s ease;
+  cursor: pointer;
 }
-.class-option:hover { border-color: var(--class-color, var(--gold)); transform: translateY(-1px); }
-.class-option.active {
-  border-color: var(--class-color, var(--gold));
-  box-shadow: inset 0 0 0 1px var(--class-color, var(--gold)), 0 0 12px -4px var(--class-color, var(--gold));
-  background: #241a10;
+.reclaim-option:hover { border-color: var(--member-color); transform: translateY(-1px); }
+.reclaim-option .member-avatar { width: 40px; height: 40px; }
+.reclaim-option .race-icon { width: 24px; height: 24px; }
+.reclaim-text { display: flex; flex-direction: column; gap: 1px; }
+.reclaim-name { font-weight: 700; color: var(--member-color); }
+.reclaim-sub { font-size: 12px; color: var(--muted); }
+.reclaim-or {
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 18px; font-size: 12px; text-transform: uppercase; letter-spacing: 2px;
 }
-.class-option .dot {
-  width: 14px; height: 14px; border-radius: 50%;
-  background: var(--class-color, var(--gold));
-  flex-shrink: 0;
-}
+.reclaim-or::before, .reclaim-or::after { content: ""; flex: 1; border-top: 1px solid var(--border); }
 
-/* ---------- Race picker (buttons, grouped by faction) ---------- */
-.race-picker { display: flex; flex-direction: column; gap: 14px; max-width: 640px; }
-.race-group-label {
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  color: var(--faction-color, var(--gold));
-  margin-bottom: 8px;
+/* ---------- Character creation: faction -> race -> class ---------- */
+.pick-step {
+  display: flex; align-items: center; gap: 10px;
+  margin: 26px 0 12px;
+  font-family: "Cinzel", "Marcellus", Georgia, serif;
+  font-size: 15px; font-weight: 700; letter-spacing: .5px;
+  color: var(--wow-yellow);
 }
-.race-options {
+.pick-num {
+  display: grid; place-items: center;
+  width: 24px; height: 24px; border-radius: 50%;
+  border: 1px solid var(--gold);
+  color: var(--gold-bright); font-size: 13px;
+}
+.faction-picker, .race-picker, .class-picker {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 8px;
-}
-.race-option {
-  display: flex;
-  align-items: center;
   gap: 10px;
-  padding: 10px 12px;
+  max-width: 720px;
+}
+.faction-picker { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 460px; gap: 14px; }
+.race-picker    { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); }
+.class-picker   { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
+
+/* every pick is a card: big emblem over its name, tinted by --pick-color */
+.faction-option, .race-option, .class-option {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 14px 8px 12px;
   border-radius: 3px;
   border: 1px solid var(--border);
   background: var(--panel-2);
   color: var(--text);
   cursor: pointer;
-  font: inherit;
-  font-size: 14px;
-  text-align: left;
-  transition: all .12s ease;
+  font: inherit; font-size: 14px;
+  transition: border-color .12s ease, transform .12s ease, box-shadow .12s ease;
 }
-.race-option:hover { border-color: var(--faction-color, var(--gold)); transform: translateY(-1px); }
-.race-option.active {
-  border-color: var(--faction-color, var(--gold));
-  box-shadow: inset 0 0 0 1px var(--faction-color, var(--gold)), 0 0 12px -4px var(--faction-color, var(--gold));
-  background: #241a10;
+.faction-option, .race-option { --pick-color: var(--faction-color, var(--gold)); }
+.class-option { --pick-color: var(--class-color, var(--gold)); }
+.faction-option:hover, .race-option:hover, .class-option:hover {
+  border-color: var(--pick-color); transform: translateY(-2px);
 }
-.race-option .dot {
-  width: 12px; height: 12px; border-radius: 50%;
-  background: var(--faction-color, var(--gold));
-  flex-shrink: 0;
+.faction-option.active, .race-option.active, .class-option.active {
+  border-color: var(--pick-color);
+  background: radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--pick-color) 22%, transparent), transparent 70%), #241a10;
+  box-shadow: inset 0 0 0 1px var(--pick-color), 0 0 16px -4px var(--pick-color);
 }
-.race-option .race-icon {
-  width: 22px; height: 22px;
-  color: var(--faction-color, var(--gold));
-  flex-shrink: 0;
+.faction-option .faction-icon, .race-option .race-icon, .class-option .class-icon {
+  color: var(--pick-color);
+  filter: drop-shadow(0 2px 3px rgba(0,0,0,.6));
+}
+.faction-option .faction-icon { width: 80px; height: 80px; }
+.race-option .race-icon       { width: 56px; height: 56px; }
+.class-option .class-icon     { width: 44px; height: 44px; }
+/* unselected cards are dimmed so the chosen path stands out */
+.faction-option:not(.active) .faction-icon,
+.race-option:not(.active) .race-icon,
+.class-option:not(.active) .class-icon { opacity: .6; }
+.faction-option { padding: 20px 8px 16px; }
+.faction-option .pick-label {
+  font-family: "Cinzel", "Marcellus", Georgia, serif;
+  font-size: 18px; font-weight: 700; letter-spacing: 1px;
+  color: color-mix(in srgb, var(--pick-color) 75%, #fff);
+}
+.pick-label { text-align: center; }
+.race-option .dot, .class-option .dot {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--pick-color);
 }
 .member-avatar .race-icon { width: 28px; height: 28px; }
 
@@ -771,7 +795,7 @@ h1, h2, h3 {
 .coin.silver { color: #d7d7d7; }
 .coin.copper { color: #e0975a; }
 
-/* ---------- Faction crest + hint ---------- */
+/* ---------- Faction crest ---------- */
 .faction-crest {
   display: inline-block;
   margin-right: 5px;
@@ -782,12 +806,6 @@ h1, h2, h3 {
 .faction-crest.crest-alliance { color: #3a7bd5; }  /* Alliance blue */
 .faction-crest.crest-horde { color: #c8102e; }     /* Horde red */
 
-.faction-hint {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: .5px;
-  margin-left: 6px;
-}
 
 /* a subtle faction accent strip on the panel */
 .member .member-headtext { min-width: 0; }
@@ -1020,12 +1038,23 @@ h1, h2, h3 {
   border-radius: 4px;
 }
 .rc-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  width: 100%;
+  padding: 0;
+  background: none; border: none; cursor: pointer; text-align: left;
   font-family: "Cinzel", Georgia, serif;
   font-size: 13px;
   letter-spacing: .5px;
   color: var(--gold);
   margin-bottom: 8px;
 }
+.rc-head:hover { color: var(--gold-bright); }
+.rc-toggle-label { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.rc-toggle-label::after { content: "Hide \25B4"; }
+.remediation-composer.collapsed { padding-top: 8px; padding-bottom: 8px; }
+.remediation-composer.collapsed .rc-head { margin-bottom: 0; }
+.remediation-composer.collapsed .rc-body { display: none; }
+.remediation-composer.collapsed .rc-toggle-label::after { content: "Propose a step \25BE"; color: var(--gold); }
 .rc-hint { font-size: 12px; margin: 8px 0 0; }
 
 /* ---------- Remediation plan (steps proposed for a boss) ---------- */

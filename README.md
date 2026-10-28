@@ -43,8 +43,9 @@ Then open:
    a 4-letter room code.
 2. Everyone (including the facilitator) **creates their own character**: pick a
    character name, enter their **real name** (who's accountable for any loot
-   they win), and choose a race and class on the join screen. That becomes your
-   own panel — no need to wait for the host. Race and class selection follow
+   they win), then pick a faction (Alliance or Horde), a race from that
+   faction, and a class that race can be. That becomes your own panel — no
+   need to wait for the host. Race and class selection follow
    **WoW: Forever** rules (see below), and each panel shows a faction crest
    (Alliance / Horde) plus the owner's real name. The real name also appears in
    the loot log and the exported action-item list, so every task has a clear
@@ -66,8 +67,10 @@ Then open:
 
 Players make their own characters, so the host doesn't pre-build the roster. The
 **Party** panel is only needed for proxy slots (someone not online) or to kick /
-reassign. If you reconnect after a drop (or a server restart) and re-enter the
-same character name, you re-take your existing slot instead of duplicating it.
+reassign. If you reconnect after a drop (or a server restart), the character
+screen lists every character nobody is currently playing under **Returning?
+Reclaim your character**. Click yours to pick up where you left off, with your
+loot and tasks intact. Re-entering the same character name works too.
 
 ### Playing with remote teammates
 

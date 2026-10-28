@@ -40,21 +40,26 @@
       <!-- Inline remediation-step composer: author a fix as the discussion
            produces it. Only shown while a boss is up. -->
       <div id="remediation-composer" class="remediation-composer hidden">
-        <div class="rc-head"><span data-icon="swords"></span> Call a strategy &mdash; propose a remediation step for this fight</div>
-        <div class="add-form">
-          <input id="rc-name" type="text" placeholder="e.g. Add a retry around the flaky network call" />
-          <select id="rc-rarity" title="How much this step matters (priority)">
-            <option value="poor">Poor (trivial) &middot; 15 dmg</option>
-            <option value="common">Common (low) &middot; 30 dmg</option>
-            <option value="uncommon" selected>Uncommon (medium) &middot; 50 dmg</option>
-            <option value="rare">Rare (high) &middot; 80 dmg</option>
-            <option value="epic">Epic (critical) &middot; 120 dmg</option>
-            <option value="legendary">Legendary (top) &middot; 200 dmg</option>
-          </select>
-          <input id="rc-desc" type="text" placeholder="Detail (optional)" />
-          <button id="btn-drop-step" class="btn btn-primary">Propose &amp; Drop Step</button>
+        <button class="rc-head" data-rc-toggle aria-expanded="true" aria-controls="rc-body" title="Show or hide the step composer">
+          <span><span data-icon="swords"></span> Call a strategy &mdash; propose a remediation step for this fight</span>
+          <span class="rc-toggle-label"></span>
+        </button>
+        <div id="rc-body" class="rc-body">
+          <div class="add-form">
+            <input id="rc-name" type="text" placeholder="e.g. Add a retry around the flaky network call" />
+            <select id="rc-rarity" title="How much this step matters (priority)">
+              <option value="poor">Poor (trivial) &middot; 15 dmg</option>
+              <option value="common">Common (low) &middot; 30 dmg</option>
+              <option value="uncommon" selected>Uncommon (medium) &middot; 50 dmg</option>
+              <option value="rare">Rare (high) &middot; 80 dmg</option>
+              <option value="epic">Epic (critical) &middot; 120 dmg</option>
+              <option value="legendary">Legendary (top) &middot; 200 dmg</option>
+            </select>
+            <input id="rc-desc" type="text" placeholder="Detail (optional)" />
+            <button id="btn-drop-step" class="btn btn-primary">Propose &amp; Drop Step</button>
+          </div>
+          <p class="rc-hint muted">On the shared screen, this drops the step straight onto the table for Need / Greed / Pass and records it on this boss's remediation plan.</p>
         </div>
-        <p class="rc-hint muted">On the shared screen, this drops the step straight onto the table for Need / Greed / Pass and records it on this boss's remediation plan.</p>
       </div>
 
       <div id="active-drop" class="active-drop empty">

@@ -1008,5 +1008,21 @@ $("#loot-desc").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#
 $("#member-name").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#btn-add-member").click(); });
 $("#boss-name").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#btn-confirm-boss").click(); });
 
+// The step composer can be collapsed to a slim bar during a fight; clicking the
+// bar reopens it. Each viewer's choice is remembered in this browser.
+const RC_COLLAPSED_KEY = "wow-retro-composer-collapsed";
+function setComposerCollapsed(collapsed) {
+  const el = $("#remediation-composer");
+  el.classList.toggle("collapsed", collapsed);
+  el.querySelector("[data-rc-toggle]").setAttribute("aria-expanded", String(!collapsed));
+  try { localStorage.setItem(RC_COLLAPSED_KEY, collapsed ? "1" : "0"); } catch { /* not remembered */ }
+}
+$("[data-rc-toggle]").addEventListener("click", () => {
+  const collapsed = !$("#remediation-composer").classList.contains("collapsed");
+  setComposerCollapsed(collapsed);
+  if (!collapsed) $("#rc-name").focus();
+});
+try { setComposerCollapsed(localStorage.getItem(RC_COLLAPSED_KEY) === "1"); } catch { /* start open */ }
+
 /* ---------------- Boot ---------------- */
 render();

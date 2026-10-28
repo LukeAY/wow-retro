@@ -12,6 +12,7 @@ const ICON_PATHS = {
   shield:  `<path d="M12 2 4 5v6c0 5 3.5 9 8 11 4.5-2 8-6 8-11V5z"/><path d="M12 6v12M7.5 10h9"/>`,
   person:  `<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.5 3.5-7 8-7s8 2.5 8 7"/>`,
   warning: `<path d="M12 3 2 20h20z"/><path d="M12 9v5M12 17h.01"/>`,
+  crown:   `<path d="M3.5 8.5 8 12l4-6.5 4 6.5 4.5-3.5-1.8 9.5H5.3z" fill="currentColor" fill-opacity=".25"/><path d="M5.3 20.5h13.4"/><circle cx="3.5" cy="8.5" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="20.5" cy="8.5" r="1"/>`,
   lootbag: `<path d="M8.5 8.5C5 11 3.5 14.5 3.5 17c0 2.5 1.8 4 4.5 4h8c2.7 0 4.5-1.5 4.5-4 0-2.5-1.5-6-5-8.5z"/><path d="M8.5 8.5 7 4.5c1.8-.8 3.2.4 5 .4s3.2-1.2 5-.4l-1.5 4"/><path d="M8.5 8.5h7"/><circle cx="12" cy="15" r="2.3"/>`,
 };
 
@@ -27,6 +28,25 @@ const RACE_ICON_PATHS = {
   "Troll":      `<ellipse cx="12" cy="13" rx="5" ry="6"/><path d="M10 7c0-2 1-4.5 2-4.5s2 2.5 2 4.5"/><path d="M7.2 11 1 9l6.3 4M16.8 11 23 9l-6.3 4"/><path d="M9.5 17.5c-1.5-.5-2.5-2-2.5-3.5M14.5 17.5c1.5-.5 2.5-2 2.5-3.5M10 12h.01M14 12h.01"/>`,
   "Undead":     `<path d="M6 11a6 6 0 0 1 12 0v3l-2 1v3H8v-3l-2-1z"/><circle cx="9.5" cy="11.5" r="1.5" fill="currentColor"/><circle cx="14.5" cy="11.5" r="1.5" fill="currentColor"/><path d="M12 13.5l-.8 1.5h1.6zM10 18v-2M12 18v-2M14 18v-2M8 18v2.5h8V18"/>`,
   "Windshaper": `<circle cx="12" cy="13" r="5"/><path d="M9 8C8 5.5 8.5 3.5 10 2M12 8V2.5M15 8c1-2.5.5-4.5-1-6"/><path d="M1.5 12h3c1.5 0 1.5-2 0-2M1.5 15.5h3.5c1.5 0 1.5 2 0 2M22.5 14H19"/><path d="M10 13h.01M14 13h.01"/>`,
+};
+
+// Class emblems for the class picker (classes in the Forever race matrix).
+const CLASS_ICON_PATHS = {
+  "Warrior": `<path d="M12 2.5 13.6 5v9.5h-3.2V5z"/><path d="M7 14.5h10M12 14.5V20"/><circle cx="12" cy="21" r="1"/>`,
+  "Paladin": `<rect x="4.5" y="3" width="15" height="6.5" rx="1"/><path d="M12 9.5V21M9.5 21h5M12 4.5v3.5M10.2 6.2h3.6"/>`,
+  "Hunter":  `<path d="M7 3c7.5 4 7.5 14 0 18"/><path d="M7 3v18"/><path d="M3 12h16M16.5 9.5 19 12l-2.5 2.5M3 10.5 4.5 12 3 13.5"/>`,
+  "Rogue":   `<path d="M20 4 18.3 9.3 12.3 15.3 8.7 11.7 14.7 5.7z"/><path d="M7.3 10.3l6.4 6.4M10 15l-5 5"/><circle cx="4.3" cy="20.3" r="1.1"/>`,
+  "Priest":  `<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/>`,
+  "Shaman":  `<path d="M13.5 2 5 13.5h6L9.5 22 19 9.5h-6.5z"/>`,
+  "Mage":    `<circle cx="15.5" cy="7.5" r="3.5"/><path d="M13 10 4.5 21"/><path d="M20 2.5v2.5M21.3 3.8h-2.6M5 5.5v2M6 6.5H4M20.5 14v2M21.5 15h-2"/>`,
+  "Warlock": `<path d="M12 2.5c.5 3.5 6 6 6 11.5a6 6 0 0 1-12 0c0-3 1.7-4.5 2-7 1.3 1.2 2 2.6 2 4.5 1-2.4 2-5 2-9z"/><path d="M12 20a2.5 2.5 0 0 1-2.5-2.5c0-1.6 1.5-2.5 2.5-4.5 1 2 2.5 2.9 2.5 4.5A2.5 2.5 0 0 1 12 20z"/>`,
+  "Druid":   `<path d="M5 19C5 10 11 4 20 4c0 9-6 15-15 15z"/><path d="M5 19 15 9M10 14h4M12 12V8.5"/>`,
+};
+
+// Original faction emblems: a crowned shield and a tusked, spiked crest.
+const FACTION_ICON_PATHS = {
+  Alliance: `<path d="M12 3.5 4.5 6.5V12c0 4.8 3.3 7.8 7.5 9.5 4.2-1.7 7.5-4.7 7.5-9.5V6.5z"/><path d="M8 10.5l1.8 1.8L12 9l2.2 3.3 1.8-1.8-.8 4.5H8.8z"/>`,
+  Horde:    `<path d="M3.5 4 8 6.5l4-3.5 4 3.5L20.5 4 19 13c-.8 4.3-3.6 7-7 8.5-3.4-1.5-6.2-4.2-7-8.5z"/><path d="M8.5 11h7M9.3 11l1.2 4.5M14.7 11l-1.2 4.5"/>`,
 };
 
 function svgIcon(cls, paths) {
@@ -53,6 +73,14 @@ function bagSlots(tasks, max) {
     html += `<span class="bag-slot filled r-${t.rarity}${fresh ? " fresh" : ""}" title="${escapeHtml(t.name)}">${svgIcon("bag-icon", ICON_PATHS.lootbag)}</span>`;
   }
   return `<div class="bag-slots${full ? " full" : ""}" aria-label="Bags ${tasks.length} of ${max}${full ? ", full" : ""}">${html}</div>`;
+}
+
+function classIcon(cls) {
+  return CLASS_ICON_PATHS[cls] ? svgIcon("class-icon", CLASS_ICON_PATHS[cls]) : "";
+}
+
+function factionIcon(faction, cls = "ui-icon") {
+  return FACTION_ICON_PATHS[faction] ? svgIcon(cls, FACTION_ICON_PATHS[faction]) : "";
 }
 
 function raceIcon(race) {

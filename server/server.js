@@ -310,6 +310,7 @@ function viewFor(room, client) {
       // only reveal a member's own choice to that member; others just see "has voted"
       hasVoted: room.activeDrop ? !!room.activeDrop.choices[m.id] : false,
       slotsUsed: slotsUsed(room, m.id),
+      isHost: !!m.clientId && m.clientId === room.facilitatorId,
     })),
     boss: room.boss,
     bossLog: room.bossLog || [],
@@ -611,6 +612,7 @@ const handlers = {
     if (!member || !member.clientId) return sendError(ws, "That slot has no connected player.");
     const target = room.clients.get(member.clientId);
     if (!target) return sendError(ws, "That player is no longer connected.");
+    if (target === client) return sendError(ws, "You're already the host.");
     client.role = "player";
     target.role = "facilitator";
     room.facilitatorId = target.id;
