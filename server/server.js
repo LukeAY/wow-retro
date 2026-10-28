@@ -33,6 +33,7 @@ const wss = new WebSocketServer({ server });
  * Room = {
  *   code, facilitatorId,
  *   lootTable: [{id,name,rarity,desc}],
+ *   mobList:   [{id,name,desc,tier,addedById,addedBy,addedReal}], // topics waiting to be pulled
  *   members:   [{id, name, cls, clientId|null, connected}],
  *   boss: { id, name, tier, hpMax, hp, slain } | null,  // active encounter
  *   activeDrop: { id, item, choices:{memberId:'need'|'greed'|'pass'} } | null,
@@ -46,18 +47,47 @@ const rooms = new Map();
 const RARITIES = ["poor", "common", "uncommon", "rare", "epic", "legendary"];
 
 /**
- * Boss tiers (shared with the local client). A boss is a retro topic; its
- * health is a number of "drops to kill". Each resolved drop damages it — a
- * won item lands a full hit, an all-pass drop only chips away — so a
- * productive discussion fells the boss faster.
+ * Boss tiers (shared with the local client). A boss is a retro topic with a
+ * pool of hit points. Each resolved step damages it by the step's rarity, so
+ * a raid boss needs several weighty fixes while a trash mob falls to one.
  */
 const BOSS_TIERS = {
-  trash: { label: "Trash mob", hp: 1 },
-  elite: { label: "Elite",     hp: 2 },
-  raid:  { label: "Raid boss", hp: 4 },
+  trash: { label: "Trash mob", hp: 100 },
+  elite: { label: "Elite",     hp: 220 },
+  raid:  { label: "Raid boss", hp: 500 },
 };
-const DMG_LOOTED = 1;
-const DMG_UNCLAIMED = 0.5;
+// Damage a resolved step deals, by its rarity (priority): heavier fixes hit
+// harder. Only owned steps count; one everyone passed on deals no damage.
+const STEP_DAMAGE = { poor: 15, common: 30, uncommon: 50, rare: 80, epic: 120, legendary: 200 };
+function stepDamage(rarity, owned) {
+  return owned ? (STEP_DAMAGE[rarity] || STEP_DAMAGE.uncommon) : 0;
+}
+// Bosses saved before health was in hit points (1/2/4 "drops to kill") are
+// rescaled to the current pools, keeping the same fraction of health left.
+function rescaleBoss(boss) {
+  if (!boss || !BOSS_TIERS[boss.tier] || boss.hpMax > 4) return boss;
+  const hpMax = BOSS_TIERS[boss.tier].hp;
+  return { ...boss, hpMax, hp: Math.round((boss.hp / boss.hpMax) * hpMax) };
+}
+/**
+ * Pulling from the mob list is weighted by tier. The first pulls lean on these
+ * opening odds (mostly trash, the odd raid boss), then every tier's weight
+ * slides toward 1 as the list empties, so later pulls are an even shuffle.
+ */
+const OPENING_WEIGHTS = { trash: 6, elite: 3, raid: 1 };
+function pickMob(room) {
+  // bosses pulled so far, including the current one if it isn't archived yet
+  const pulled = room.bossLog.length +
+    (room.boss && !room.bossLog.some((b) => b.id === room.boss.id) ? 1 : 0);
+  const progress = pulled / (pulled + room.mobList.length);
+  const weights = room.mobList.map((m) => 1 + (OPENING_WEIGHTS[m.tier] - 1) * (1 - progress));
+  let r = Math.random() * weights.reduce((a, b) => a + b, 0);
+  for (let i = 0; i < weights.length; i++) {
+    r -= weights[i];
+    if (r < 0) return room.mobList[i];
+  }
+  return room.mobList[room.mobList.length - 1];
+}
 // Bag slots: the most open (not done) tasks one player can own at once.
 // Completing a task frees its slot. A full player can't Need/Greed.
 const MAX_SLOTS = 6;
@@ -116,6 +146,7 @@ function serializeRoom(room) {
     code: room.code,
     facilitatorId: room.facilitatorId, // kept so a refresh can reclaim the role
     lootTable: room.lootTable,
+    mobList: room.mobList,
     members: room.members.map((m) => ({ id: m.id, name: m.name, realName: m.realName || "", cls: m.cls, race: m.race || "Human" })),
     boss: room.boss,
     bossLog: room.bossLog || [],
@@ -163,11 +194,12 @@ function loadRooms() {
       code: r.code,
       facilitatorId: r.facilitatorId || null, // reclaimable by whoever presents it
       lootTable: r.lootTable || [],
+      mobList: r.mobList || [],
       members: (r.members || []).map((m) => ({
         id: m.id, name: m.name, realName: m.realName || "", cls: m.cls, race: m.race || "Human",
         clientId: null, connected: false, // nobody is connected after a restart
       })),
-      boss: r.boss || null,
+      boss: rescaleBoss(r.boss) || null,
       bossLog: r.bossLog || [],
       activeDrop: r.activeDrop || null,
       lastResult: r.lastResult || null,
@@ -200,6 +232,7 @@ function createRoom() {
     code,
     facilitatorId: null,
     lootTable: seededLootTable(),
+    mobList: [],
     members: [],
     boss: null,
     bossLog: [],      // archived problems (id, name, tier, slain, remediation[])
@@ -263,6 +296,7 @@ function viewFor(room, client) {
       myChoice,
     },
     lootTable: room.lootTable,
+    mobList: room.mobList,
     maxSlots: MAX_SLOTS,
     members: room.members.map((m) => ({
       id: m.id,
@@ -363,6 +397,7 @@ function resolveDrop(room) {
     winnerName: winner ? winner.name : null,
     winnerReal: winner ? (winner.realName || "") : null,
     winnerContext,
+    damage: null, // set below if a live boss took the hit
   };
 
   if (winner) {
@@ -396,14 +431,27 @@ function resolveDrop(room) {
     });
   }
 
-  // Damage the active boss: a won drop lands a full hit, an all-pass chips away.
+  // Damage the active boss by the step's rarity. Passed-over steps deal none.
   if (room.boss && !room.boss.slain) {
-    room.boss.hp = Math.max(0, room.boss.hp - (winner ? DMG_LOOTED : DMG_UNCLAIMED));
+    const damage = stepDamage(drop.item.rarity, !!winner);
+    room.boss.hp = Math.max(0, room.boss.hp - damage);
+    room.lastResult.damage = damage;
     if (room.boss.hp <= 0) room.boss.slain = true;
   }
 }
 
 /* ---------------- Message handlers ---------------- */
+
+// Validate a boss topic (name / description / tier) from a client message.
+function readTopic(msg, fallbackName = "") {
+  const name = (msg.name || "").trim() || fallbackName;
+  if (!name) return { error: "Name the boss (the topic to discuss)." };
+  if (name.length > 60) return { error: "Topic name is too long (60 max)." };
+  const desc = (msg.desc || "").trim();
+  if (desc.length > 500) return { error: "Description is too long (500 max)." };
+  const tier = BOSS_TIERS[msg.tier] ? msg.tier : "elite";
+  return { name, desc, tier };
+}
 
 function isFacilitator(room, client) {
   return client.role === "facilitator" && room.facilitatorId === client.id;
@@ -587,19 +635,63 @@ const handlers = {
   },
 
   // Facilitator pulls a boss (names the retro topic + picks a difficulty).
+  // Pull the next boss: a specific mob (mobId), a weighted-random mob from the
+  // list (random), or a topic named on the spot (name/desc/tier).
   pullBoss(ws, client, msg) {
     const room = client.room;
     if (!room || !isFacilitator(room, client)) return;
-    const name = (msg.name || "").trim() || "Unnamed Topic";
-    if (name.length > 60) return sendError(ws, "Topic name is too long (60 max).");
-    const desc = (msg.desc || "").trim();
-    if (desc.length > 500) return sendError(ws, "Description is too long (500 max).");
-    const tier = BOSS_TIERS[msg.tier] ? msg.tier : "elite";
-    const hpMax = BOSS_TIERS[tier].hp;
+    let topic;
+    if (msg.mobId || msg.random) {
+      if (room.mobList.length === 0) return sendError(ws, "The mob list is empty. Scout some topics first.");
+      topic = msg.mobId ? room.mobList.find((m) => m.id === msg.mobId) : pickMob(room);
+      if (!topic) return sendError(ws, "That mob is no longer on the list.");
+      room.mobList = room.mobList.filter((m) => m !== topic);
+    } else {
+      topic = readTopic(msg, "Unnamed Topic");
+      if (topic.error) return sendError(ws, topic.error);
+    }
     archiveBoss(room);
-    room.boss = { id: randomUUID(), name, desc, tier, hpMax, hp: hpMax, slain: false, remediation: [] };
+    const hpMax = BOSS_TIERS[topic.tier].hp;
+    room.boss = {
+      id: randomUUID(), name: topic.name, desc: topic.desc, tier: topic.tier,
+      scoutedBy: topic.addedBy || "", hpMax, hp: hpMax, slain: false, remediation: [],
+    };
     room.activeDrop = null;
     room.lastResult = null;
+    broadcast(room);
+  },
+  // Anyone with a character (or the facilitator) can scout a topic onto the
+  // shared mob list. Exact duplicates are refused; near-duplicates are left to
+  // the room, since everyone can see the list.
+  addMob(ws, client, msg) {
+    const room = client.room;
+    if (!room) return;
+    const me = client.memberId ? room.members.find((m) => m.id === client.memberId) : null;
+    if (!me && !isFacilitator(room, client)) return sendError(ws, "Create a character before scouting topics.");
+    const topic = readTopic(msg);
+    if (topic.error) return sendError(ws, topic.error);
+    const key = topic.name.toLowerCase();
+    if (room.mobList.some((m) => m.name.toLowerCase() === key)) {
+      return sendError(ws, `"${topic.name}" is already on the mob list.`);
+    }
+    room.mobList.push({
+      id: randomUUID(), ...topic,
+      addedById: me ? me.id : null,
+      addedBy: me ? me.name : "Facilitator",
+      addedReal: me ? (me.realName || "") : "",
+    });
+    broadcast(room);
+  },
+  // The scout who added a mob, or the facilitator, can take it off the list.
+  removeMob(ws, client, msg) {
+    const room = client.room;
+    if (!room) return;
+    const mob = room.mobList.find((m) => m.id === msg.mobId);
+    if (!mob) return;
+    if (!isFacilitator(room, client) && mob.addedById !== client.memberId) {
+      return sendError(ws, "Only the scout who added it (or the facilitator) can remove it.");
+    }
+    room.mobList = room.mobList.filter((m) => m !== mob);
     broadcast(room);
   },
 
@@ -722,6 +814,7 @@ const handlers = {
     const room = client.room;
     if (!room || !isFacilitator(room, client)) return;
     room.lootTable = seededLootTable();
+    room.mobList = [];
     room.boss = null;
     room.bossLog = [];
     room.activeDrop = null;

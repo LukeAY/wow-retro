@@ -16,6 +16,7 @@
     <div class="topbar-actions" id="topbar-actions">
       <span id="conn-status" class="muted">connecting&hellip;</span>
       <span id="room-badge" class="muted"></span>
+      <button id="btn-mobs" class="btn btn-ghost hidden">Mob List</button>
       <button id="btn-config" class="btn btn-ghost hidden">Loot Table</button>
       <button id="btn-roster" class="btn btn-ghost hidden">Party</button>
       <button id="btn-export" class="btn btn-ghost hidden" title="Copy the action items as markdown">Loot Ledger</button>
@@ -63,9 +64,35 @@
       <div id="class-picker" class="class-picker"></div>
 
       <div style="margin-top:20px;">
-        <button id="btn-create-char" class="btn btn-primary">Enter the Dungeon</button>
+        <button id="btn-create-char" class="btn btn-primary">Create Character</button>
       </div>
       <p id="char-error" class="muted" style="color:var(--need);min-height:18px;"></p>
+    </section>
+  </main>
+
+  <!-- Scouting (shown once after creating a character): add topics to the shared mob list -->
+  <main id="scout" class="layout hidden">
+    <section class="card">
+      <div class="section-head"><h2>Scout the Dungeon</h2><span id="scout-count" class="muted"></span></div>
+      <p class="muted">Add the topics you want to discuss. Each one becomes a boss on the shared <b>Mob List</b>. The whole party sees the list live, so check it before adding a duplicate. When the facilitator pulls a boss, one is drawn at random: easier mobs tend to come first, then anything goes.</p>
+      <div class="mob-form" data-mob-form>
+        <input name="mob-name" type="text" maxlength="60" placeholder="Topic (boss name), e.g. Flaky CI pipeline" />
+        <textarea name="mob-desc" maxlength="500" rows="2" placeholder="What is it, and why does it matter? (optional)"></textarea>
+        <div class="mob-form-row">
+          <select name="mob-tier" title="How big is this topic?">
+            <option value="trash">Trash mob &mdash; minor nitpick (100 HP)</option>
+            <option value="elite" selected>Elite &mdash; worth discussing (220 HP)</option>
+            <option value="raid">Raid boss &mdash; big systemic issue (500 HP)</option>
+          </select>
+          <button class="btn btn-primary" data-add-mob>Add to Mob List</button>
+        </div>
+      </div>
+      <p id="scout-error" class="muted" style="color:var(--need);min-height:18px;"></p>
+      <ul id="scout-mob-list" class="editable-list mob-list"></ul>
+      <div style="margin-top:20px;">
+        <button id="btn-enter-dungeon" class="btn btn-primary">Enter the Dungeon</button>
+        <span class="muted" style="font-size:12px;margin-left:10px;">You can add more later from the Mob List.</span>
+      </div>
     </section>
   </main>
 
@@ -91,12 +118,12 @@
         <div class="add-form">
           <input id="rc-name" type="text" placeholder="e.g. Add a retry around the flaky network call" />
           <select id="rc-rarity" title="How much this step matters (priority)">
-            <option value="poor">Poor (trivial)</option>
-            <option value="common">Common (low)</option>
-            <option value="uncommon" selected>Uncommon (medium)</option>
-            <option value="rare">Rare (high)</option>
-            <option value="epic">Epic (critical)</option>
-            <option value="legendary">Legendary (top)</option>
+            <option value="poor">Poor (trivial) &middot; 15 dmg</option>
+            <option value="common">Common (low) &middot; 30 dmg</option>
+            <option value="uncommon" selected>Uncommon (medium) &middot; 50 dmg</option>
+            <option value="rare">Rare (high) &middot; 80 dmg</option>
+            <option value="epic">Epic (critical) &middot; 120 dmg</option>
+            <option value="legendary">Legendary (top) &middot; 200 dmg</option>
           </select>
           <input id="rc-desc" type="text" placeholder="Detail (optional)" />
           <button id="btn-drop-step" class="btn btn-primary">Propose Step</button>
@@ -176,6 +203,27 @@
     </div>
   </div>
 
+  <!-- Mob list modal (everyone; facilitator can pull a specific mob) -->
+  <div id="modal-mobs" class="modal hidden">
+    <div class="modal-box">
+      <div class="modal-head"><h3>Mob List</h3><button class="modal-close" data-close>&times;</button></div>
+      <p class="muted">Topics waiting to be pulled. Pull a Boss draws one at random, favouring easier mobs early on.</p>
+      <div class="mob-form" data-mob-form>
+        <input name="mob-name" type="text" maxlength="60" placeholder="Topic (boss name), e.g. Flaky CI pipeline" />
+        <textarea name="mob-desc" maxlength="500" rows="2" placeholder="What is it, and why does it matter? (optional)"></textarea>
+        <div class="mob-form-row">
+          <select name="mob-tier" title="How big is this topic?">
+            <option value="trash">Trash mob &mdash; minor nitpick (100 HP)</option>
+            <option value="elite" selected>Elite &mdash; worth discussing (220 HP)</option>
+            <option value="raid">Raid boss &mdash; big systemic issue (500 HP)</option>
+          </select>
+          <button class="btn btn-primary" data-add-mob>Add to Mob List</button>
+        </div>
+      </div>
+      <ul id="modal-mob-list" class="editable-list mob-list"></ul>
+    </div>
+  </div>
+
   <!-- Roster modal (facilitator) -->
   <div id="modal-roster" class="modal hidden">
     <div class="modal-box">
@@ -202,7 +250,7 @@
   <div id="modal-boss" class="modal hidden">
     <div class="modal-box">
       <div class="modal-head"><h3>Pull a Boss</h3><button class="modal-close" data-close>&times;</button></div>
-      <p class="muted">Name the problem you're about to address, describe it so the room has context, and pick how big it is. Tougher bosses have more health, so expect to commit more remediation steps before they fall.</p>
+      <p class="muted">The mob list is empty, so name a topic on the spot. Name the problem you're about to address, describe it so the room has context, and pick how big it is. Tougher bosses have more health, so expect to commit more remediation steps before they fall.</p>
       <label class="muted" style="display:block;margin:16px 0 6px;">Problem (boss name)</label>
       <input id="boss-name" type="text" maxlength="60" placeholder="e.g. Flaky CI pipeline"
         style="font:inherit;padding:10px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-2);color:var(--text);width:100%;box-sizing:border-box;" />
@@ -211,9 +259,9 @@
         style="font:inherit;padding:10px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-2);color:var(--text);width:100%;box-sizing:border-box;resize:vertical;"></textarea>
       <label class="muted" style="display:block;margin:18px 0 6px;">Difficulty</label>
       <select id="boss-tier" style="font:inherit;padding:10px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-2);color:var(--text);width:100%;">
-        <option value="trash">Trash mob &mdash; minor nitpick (1 drop to kill)</option>
-        <option value="elite" selected>Elite &mdash; worth discussing (2 drops to kill)</option>
-        <option value="raid">Raid boss &mdash; big systemic issue (4 drops to kill)</option>
+        <option value="trash">Trash mob &mdash; minor nitpick (100 HP)</option>
+        <option value="elite" selected>Elite &mdash; worth discussing (220 HP)</option>
+        <option value="raid">Raid boss &mdash; big systemic issue (500 HP)</option>
       </select>
       <div style="margin-top:20px;">
         <button id="btn-confirm-boss" class="btn btn-primary">Pull Boss</button>

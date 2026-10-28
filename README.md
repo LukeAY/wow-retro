@@ -50,12 +50,18 @@ Then open:
    the loot log and the exported action-item list, so every task has a clear
    owner. A **Quest Log** panel summarizes who owns how many open vs. done
    tasks, and hovering a party panel shows that person's details and workload.
-3. Facilitator **drops loot** (random or a specific item).
-4. Each player picks **Need / Greed / Pass** on their own screen. Others see only
+3. Everyone **scouts the dungeon**: add the topics you want to discuss (name,
+   optional description, difficulty) to the shared **Mob List**. The list
+   updates live for the whole party, so you can see what's already there before
+   adding a duplicate (exact duplicates are refused). Hit **Enter the Dungeon**
+   when you're done; the **Mob List** button adds more later.
+4. Facilitator clicks **Pull a Boss**, which draws a topic from the Mob List at
+   random (see *Pulling from the Mob List* below), then **drops loot**.
+5. Each player picks **Need / Greed / Pass** on their own screen. Others see only
    that a vote was cast, not what it was.
-5. Facilitator clicks **Roll & Resolve**. The server rolls, reveals every roll,
+6. Facilitator clicks **Roll & Resolve**. The server rolls, reveals every roll,
    and the winner gets a loot toast + the task.
-6. **Loot Ledger** copies a markdown remediation plan **grouped by problem** —
+7. **Loot Ledger** copies a markdown remediation plan **grouped by problem** —
    each boss with its steps, owners, and done state as a checklist.
 
 Players make their own characters, so the host doesn't pre-build the roster. The
@@ -139,11 +145,28 @@ with its own list of fixes and owners.
    **description** so the room has context on what the problem is and why it
    matters (it shows under the boss name and in the export), and pick a
    difficulty:
-   - **Trash mob** — a minor nitpick. 1 step to kill.
-   - **Elite** — worth discussing. 2 steps to kill.
-   - **Raid boss** — a big systemic issue. 4 steps to kill.
-   Tougher bosses have more health, so you're expected to commit more (and
-   heavier) remediation steps before they fall.
+   - **Trash mob** — a minor nitpick. 100 HP (about one rare step).
+   - **Elite** — worth discussing. 220 HP (about three rare steps).
+   - **Raid boss** — a big systemic issue. 500 HP (about four epic or six
+     rare steps).
+   Each resolved step deals damage by its **rarity**: Poor 15, Common 30,
+   Uncommon 50, Rare 80, Epic 120, Legendary 200. Only owned steps count: one
+   everyone passes on deals no damage. So a raid boss
+   needs several weighty, owned fixes, while trivial ones barely scratch it.
+   The health bar shows hit points, the result banner shows the damage dealt,
+   and the step composer's rarity picker shows each rarity's damage. Tune
+   `BOSS_TIERS` and `STEP_DAMAGE` in `server/server.js` (and `app.js` for local
+   mode).
+
+   **Pulling from the Mob List (online mode).** Topics scouted onto the Mob
+   List become bosses when pulled. **Pull a Boss** draws one at random,
+   weighted by difficulty: the first pull favours trash mobs 6 : 3 : 1 over
+   elites and raid bosses, and those odds slide toward even as the list empties,
+   so the run eases in and then anything goes. The facilitator can also pull a
+   specific mob from the Mob List, and if the list is empty Pull a Boss falls
+   back to naming a topic on the spot. A pulled mob leaves the list, and the
+   boss shows who scouted it. Scouts can remove their own mobs; the facilitator
+   can remove any. Tune the odds with `OPENING_WEIGHTS` in `server/server.js`.
 2. **Propose remediation steps (anyone).** While the boss is up, **any party
    member** can type a fix into the inline composer (name + priority/rarity +
    optional detail) and hit **Propose Step** — it joins the boss's remediation
@@ -152,8 +175,8 @@ with its own list of fixes and owners.
    when the room is ready, and you resolve it with Need / Greed / Pass. This
    keeps brainstorming open to everyone while the facilitator still paces the
    encounter — and you can't drop over a vote that's already in progress. Every
-   resolved step **damages the boss**: a step someone owns (wins) lands a full
-   hit, while a step everyone passes on only chips away (half a hit). A health
+   step someone owns (wins) **damages the boss** by its rarity, while a step
+   everyone passes on deals no damage. A health
    bar drains as you go, and the plan shows each step as *proposed*, *on the
    table*, *owned* (with its owner), or *unowned*.
 

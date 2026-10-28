@@ -44,12 +44,12 @@
         <div class="add-form">
           <input id="rc-name" type="text" placeholder="e.g. Add a retry around the flaky network call" />
           <select id="rc-rarity" title="How much this step matters (priority)">
-            <option value="poor">Poor (trivial)</option>
-            <option value="common">Common (low)</option>
-            <option value="uncommon" selected>Uncommon (medium)</option>
-            <option value="rare">Rare (high)</option>
-            <option value="epic">Epic (critical)</option>
-            <option value="legendary">Legendary (top)</option>
+            <option value="poor">Poor (trivial) &middot; 15 dmg</option>
+            <option value="common">Common (low) &middot; 30 dmg</option>
+            <option value="uncommon" selected>Uncommon (medium) &middot; 50 dmg</option>
+            <option value="rare">Rare (high) &middot; 80 dmg</option>
+            <option value="epic">Epic (critical) &middot; 120 dmg</option>
+            <option value="legendary">Legendary (top) &middot; 200 dmg</option>
           </select>
           <input id="rc-desc" type="text" placeholder="Detail (optional)" />
           <button id="btn-drop-step" class="btn btn-primary">Propose &amp; Drop Step</button>
@@ -157,9 +157,9 @@
         style="font:inherit;padding:10px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-2);color:var(--text);width:100%;box-sizing:border-box;resize:vertical;"></textarea>
       <label class="muted" style="display:block;margin:18px 0 6px;">Difficulty</label>
       <select id="boss-tier" style="font:inherit;padding:10px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-2);color:var(--text);width:100%;">
-        <option value="trash">Trash mob &mdash; minor nitpick (1 drop to kill)</option>
-        <option value="elite" selected>Elite &mdash; worth discussing (2 drops to kill)</option>
-        <option value="raid">Raid boss &mdash; big systemic issue (4 drops to kill)</option>
+        <option value="trash">Trash mob &mdash; minor nitpick (100 HP)</option>
+        <option value="elite" selected>Elite &mdash; worth discussing (220 HP)</option>
+        <option value="raid">Raid boss &mdash; big systemic issue (500 HP)</option>
       </select>
       <div style="margin-top:20px;">
         <button id="btn-confirm-boss" class="btn btn-primary">Pull Boss</button>

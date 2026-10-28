@@ -57,6 +57,22 @@ let ws = null;
 let view = null;            // last state from server
 let lastShownResultId = null; // so we only toast a given resolve once
 let lastSlainBossId = null;   // so we only toast a given boss defeat once
+let lastPulledBossId = null;  // so we only toast a given boss pull once
+
+// Rooms this tab has finished scouting, so a refresh doesn't re-show the screen.
+const SCOUTED_KEY = "wow-retro-scouted-rooms";
+const scoutedThisTab = new Set();
+function hasScouted(room) {
+  try { return JSON.parse(sessionStorage.getItem(SCOUTED_KEY) || "[]").includes(room); }
+  catch { return false; }
+}
+function markScouted(room) {
+  try {
+    const rooms = JSON.parse(sessionStorage.getItem(SCOUTED_KEY) || "[]");
+    if (!rooms.includes(room)) sessionStorage.setItem(SCOUTED_KEY, JSON.stringify([...rooms, room]));
+  } catch { /* storage unavailable: the screen just shows again next time */ }
+  scoutedThisTab.add(room);
+}
 
 function connect() {
   const proto = location.protocol === "https:" ? "wss" : "ws";
@@ -75,7 +91,7 @@ function connect() {
     try { msg = JSON.parse(e.data); } catch { return; }
     if (msg.type === "meta") { RACE_CLASSES = msg.raceClasses || {}; FACTION = msg.faction || {}; }
     else if (msg.type === "state") onState(msg);
-    else if (msg.type === "error") { showLobbyError(msg.message); flashError(msg.message); }
+    else if (msg.type === "error") { showLobbyError(msg.message); $("#scout-error").textContent = msg.message; flashError(msg.message); }
     else if (msg.type === "kicked") {
       alert(`You were removed from the "${msg.memberName}" slot by the facilitator. You can claim an open slot again.`);
     }
@@ -115,6 +131,7 @@ function onState(msg) {
 
   // put room in URL for easy refresh/reconnect + sharing
   if (firstRoom) {
+    lastPulledBossId = msg.boss ? msg.boss.id : null; // don't toast a boss already up when we join
     const url = new URL(location.href);
     url.searchParams.set("room", msg.room);
     history.replaceState({}, "", url);
@@ -122,23 +139,24 @@ function onState(msg) {
 
   const hasCharacter = !!msg.you.memberId;
 
-  // No character yet -> show the creation screen, hide the game.
-  if (!hasCharacter) {
-    $("#create-char").classList.remove("hidden");
+  // Before the game: character creation, then scouting topics for the mob list.
+  const scouting = hasCharacter && !scoutedThisTab.has(msg.room) && !hasScouted(msg.room);
+  if (!hasCharacter || scouting) {
+    $("#create-char").classList.toggle("hidden", hasCharacter);
+    $("#scout").classList.toggle("hidden", !scouting);
     $("#game").classList.add("hidden");
-    $("#btn-config").classList.add("hidden");
-    $("#btn-roster").classList.add("hidden");
-    $("#btn-export").classList.add("hidden");
-    ensureValidClass();
-    renderRacePicker();
-    renderClassPicker();
+    ["#btn-mobs", "#btn-config", "#btn-roster", "#btn-export"].forEach((b) => $(b).classList.add("hidden"));
+    if (scouting) renderMobLists();
+    else { ensureValidClass(); renderRacePicker(); renderClassPicker(); }
     return;
   }
 
-  // Has a character -> enter the game.
+  // Has a character and has scouted -> enter the game.
   $("#create-char").classList.add("hidden");
+  $("#scout").classList.add("hidden");
   $("#game").classList.remove("hidden");
   $("#btn-export").classList.remove("hidden");
+  $("#btn-mobs").classList.remove("hidden");
 
   const isFacilitator = msg.you.role === "facilitator";
   $("#btn-config").classList.toggle("hidden", !isFacilitator);
@@ -240,6 +258,7 @@ function submitCharacter() {
 }
 
 function render() {
+  renderMobLists();
   renderBoss();
   renderStageControls();
   renderActiveDrop();
@@ -331,13 +350,14 @@ function renderBoss() {
       <div class="boss-tier">${tier.label}</div>
     </div>
     ${boss.desc ? `<div class="boss-desc-text">${escapeHtml(boss.desc)}</div>` : ""}
+    ${boss.scoutedBy ? `<div class="boss-scout">Scouted by ${escapeHtml(boss.scoutedBy)}</div>` : ""}
     <div class="boss-hpwrap">
       <div class="boss-hp" style="width:${pct}%;"></div>
-      <div class="boss-hptext">${boss.slain ? "DEFEATED" : `${pct}% HP`}</div>
+      <div class="boss-hptext">${boss.slain ? "DEFEATED" : `${Math.ceil(boss.hp)} / ${boss.hpMax} HP`}</div>
     </div>
     ${boss.slain
       ? `<div class="boss-slain-line">${slainLine(boss.name, looted)}</div>`
-      : `<div class="boss-sub">Propose remediation steps. Every resolved step damages the boss — owned fixes hit hardest.</div>`}
+      : `<div class="boss-sub">Propose remediation steps. Every step someone owns damages the boss, and weightier fixes hit harder.</div>`}
     ${renderRemediationPlan(boss)}`;
 }
 
@@ -410,10 +430,18 @@ function renderActiveDrop() {
     const boss = view.boss;
     const isFac = view.you.role === "facilitator";
     let hint;
+    const mobs = view.mobList.length;
+    const lurking = mobs
+      ? `${plural(mobs, "mob lurks", "mobs lurk")} on the Mob List.`
+      : "The Mob List is empty.";
     if (!boss) {
-      hint = isFac ? "The dungeon is quiet. Pull a boss — a problem worth tackling — to begin." : "The dungeon is quiet. Waiting for the facilitator to pull a boss…";
+      hint = isFac
+        ? `The dungeon is quiet. ${lurking} ${mobs ? "Pull a Boss to draw one at random." : "Scout some topics, or Pull a Boss to name one on the spot."}`
+        : `The dungeon is quiet. ${lurking} Waiting for the facilitator to pull a boss…`;
     } else if (boss.slain) {
-      hint = isFac ? "The boss lies slain. Pull the next one, or end the encounter." : "The boss lies slain. Waiting for the facilitator…";
+      hint = isFac
+        ? `The boss lies slain. ${lurking} Pull the next one, or end the encounter.`
+        : `The boss lies slain. ${lurking} Waiting for the facilitator…`;
     } else {
       hint = isFac
         ? "The boss is engaged! Anyone can propose remediation steps; drop one from the plan below (or from the backlog) to roll for it."
@@ -496,7 +524,7 @@ function renderResult() {
       : `${cap(rw.choice)} &mdash; rolled <b>${rw.roll}</b>`;
     return `<div class="roll-row">${escapeHtml(rw.name)}${who}: ${txt}${win}</div>`;
   }).join("");
-  el.innerHTML = `<div class="winner-line">${headline}</div><div class="roll-detail">${rows}</div>`;
+  el.innerHTML = `<div class="winner-line">${headline}</div>${damageLine(res)}<div class="roll-detail">${rows}</div>`;
 }
 
 function renderParty() {
@@ -617,8 +645,13 @@ function maybeToast() {
     lastShownResultId = res.dropId;
     showLootToast(res.itemName, res.rarity, res.winnerName);
   }
-  // fire a victory toast once per boss when the server marks it slain
+  // announce each newly pulled boss once
   const boss = view.boss;
+  if (boss && !boss.slain && boss.id !== lastPulledBossId) {
+    lastPulledBossId = boss.id;
+    showPullToast(boss);
+  }
+  // fire a victory toast once per boss when the server marks it slain
   if (boss && boss.slain && boss.id !== lastSlainBossId) {
     lastSlainBossId = boss.id;
     showBossToast(boss);
@@ -626,6 +659,31 @@ function maybeToast() {
 }
 
 // A victory toast when a boss (topic) is fully defeated — fires on everyone.
+// Toast colour per boss tier, matching the tier colours.
+const TIER_TOAST = { trash: "common", elite: "epic", raid: "legendary" };
+
+function showPullToast(boss) {
+  const stack = $("#toast-stack");
+  if (!stack) return;
+  const tier = BOSS_TIERS[boss.tier] || BOSS_TIERS.elite;
+  const toast = document.createElement("div");
+  toast.className = `loot-toast t-${TIER_TOAST[boss.tier] || "epic"}`;
+  toast.innerHTML = `
+    <div class="toast-icon">${icon("skull")}</div>
+    <div class="toast-body">
+      <div class="toast-received">A boss approaches:</div>
+      <div class="toast-item">[${escapeHtml(boss.name)}]</div>
+      <div class="toast-value"><span class="rarity-label">${tier.label}</span></div>
+      ${boss.scoutedBy ? `<div class="toast-winner">Scouted by <b>${escapeHtml(boss.scoutedBy)}</b></div>` : ""}
+    </div>`;
+  stack.appendChild(toast);
+  setTimeout(() => {
+    toast.classList.add("leaving");
+    toast.addEventListener("animationend", () => toast.remove(), { once: true });
+    setTimeout(() => toast.remove(), 500);
+  }, 4500);
+}
+
 function showBossToast(boss) {
   const stack = $("#toast-stack");
   if (!stack) return;
@@ -731,6 +789,47 @@ function renderLootTableModal() {
       <button class="li-remove" data-remove-loot="${l.id}" title="Remove">&times;</button>`;
     list.appendChild(li);
   });
+}
+
+// The shared mob list, rendered on the scout screen and in the Mob List modal.
+// Scouts can remove their own mobs; the facilitator can remove any, and pull a
+// specific one from the modal when no boss is engaged.
+const TIER_ORDER = { trash: 0, elite: 1, raid: 2 };
+function renderMobLists() {
+  const mobs = [...view.mobList].sort((a, b) => TIER_ORDER[a.tier] - TIER_ORDER[b.tier]);
+  const isFac = view.you.role === "facilitator";
+  const fighting = !!view.boss && !view.boss.slain;
+  $("#scout-count").textContent = plural(mobs.length, "mob", "mobs") + " scouted";
+  [["#scout-mob-list", false], ["#modal-mob-list", isFac]].forEach(([sel, canPull]) => {
+    const list = $(sel);
+    list.innerHTML = mobs.length ? ""
+      : `<li class="muted" style="justify-content:center;">No mobs scouted yet. Add the first topic above.</li>`;
+    mobs.forEach((m) => {
+      const tier = BOSS_TIERS[m.tier] || BOSS_TIERS.elite;
+      const by = m.addedReal ? `${m.addedBy} (${m.addedReal})` : m.addedBy;
+      const li = document.createElement("li");
+      li.innerHTML = `
+        <span class="mob-tier-dot" style="--mob-color:${tier.color}"></span>
+        <span class="mob-main">
+          <span class="li-name">${escapeHtml(m.name)}</span>
+          ${m.desc ? `<span class="mob-desc">${escapeHtml(m.desc)}</span>` : ""}
+          <span class="li-sub">${tier.label} &middot; scouted by ${escapeHtml(by)}</span>
+        </span>
+        ${canPull ? `<button class="btn btn-primary li-drop" data-pull-mob="${m.id}" ${fighting ? "disabled title=\"Finish the current boss first\"" : ""}>Pull</button>` : ""}
+        ${isFac || m.addedById === view.you.memberId ? `<button class="li-remove" data-remove-mob="${m.id}" title="Remove from the mob list">&times;</button>` : ""}`;
+      list.appendChild(li);
+    });
+  });
+}
+
+function addMobFrom(form) {
+  const name = form.querySelector("[name=mob-name]");
+  const desc = form.querySelector("[name=mob-desc]");
+  if (!name.value.trim()) { name.focus(); return; }
+  $("#scout-error").textContent = "";
+  send({ type: "addMob", name: name.value, desc: desc.value, tier: form.querySelector("[name=mob-tier]").value });
+  name.value = ""; desc.value = "";
+  name.focus();
 }
 
 function renderRosterModal() {
@@ -844,6 +943,12 @@ function escapeHtml(str) {
 }
 function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 function plural(n, one, many) { return `${n} ${n === 1 ? one : many}`; }
+// "Dealt N damage" under a resolved drop, or nothing if no live boss was hit.
+function damageLine(res) {
+  if (res.damage == null) return "";
+  if (!res.damage) return `<div class="damage-line muted">No damage. Nobody took ownership of it.</div>`;
+  return `<div class="damage-line">${icon("swords")} Dealt <b>${res.damage}</b> damage</div>`;
+}
 // Victory line under a slain boss, worded as loot rather than tasks.
 function slainLine(bossName, looted) {
   const name = escapeHtml(bossName);
@@ -872,7 +977,16 @@ $("#btn-create-char").addEventListener("click", submitCharacter);
 $("#char-name").addEventListener("keydown", (e) => { if (e.key === "Enter") submitCharacter(); });
 $("#char-realname").addEventListener("keydown", (e) => { if (e.key === "Enter") submitCharacter(); });
 
-$("#btn-pull-boss").addEventListener("click", () => openModal("#modal-boss"));
+// Pull a Boss draws from the mob list at random; with nothing scouted, name one on the spot.
+$("#btn-pull-boss").addEventListener("click", () => {
+  if (view.mobList.length) send({ type: "pullBoss", random: true });
+  else openModal("#modal-boss");
+});
+$("#btn-mobs").addEventListener("click", () => openModal("#modal-mobs"));
+$("#btn-enter-dungeon").addEventListener("click", () => { markScouted(view.room); onState(view); });
+document.querySelectorAll("[data-mob-form] [name=mob-name]").forEach((input) =>
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") addMobFrom(input.closest("[data-mob-form]")); })
+);
 $("#btn-confirm-boss").addEventListener("click", () => {
   send({ type: "pullBoss", name: $("#boss-name").value, desc: $("#boss-desc").value, tier: $("#boss-tier").value });
   $("#boss-name").value = "";
@@ -930,6 +1044,9 @@ document.addEventListener("click", (e) => {
     if (m && confirm(`Hand facilitator (host) control to the player in "${m.name}"? You'll become a regular player.`)) send({ type: "reassignFacilitator", memberId: m.id });
     return;
   }
+  if (t.matches("[data-add-mob]")) { addMobFrom(t.closest("[data-mob-form]")); return; }
+  if (t.matches("[data-remove-mob]")) { send({ type: "removeMob", mobId: t.getAttribute("data-remove-mob") }); return; }
+  if (t.matches("[data-pull-mob]")) { if (!t.disabled) { send({ type: "pullBoss", mobId: t.getAttribute("data-pull-mob") }); closeModals(); } return; }
   if (t.matches("[data-drop-loot]")) { send({ type: "drop", lootId: t.getAttribute("data-drop-loot") }); closeModals(); return; }
   if (t.matches("[data-drop-step]")) { if (!t.disabled) send({ type: "dropStep", stepId: t.getAttribute("data-drop-step") }); return; }
 });

@@ -17,19 +17,28 @@ const RARITY = {
 const RARITY_ORDER = ["poor", "common", "uncommon", "rare", "epic", "legendary"];
 
 /**
- * Boss tiers (shared mechanic). A boss is a retro topic. Its health is a
- * number of "drops to kill" — each resolved drop damages it. Looted (won)
- * drops hit harder than ones everyone passed on, so a productive discussion
- * fells the boss faster. Tougher tiers expect heavier action items.
+ * Boss tiers (shared mechanic). A boss is a retro topic with a pool of hit
+ * points. Each resolved step damages it by the step's rarity, so a raid boss
+ * needs several weighty fixes while a trash mob falls to one.
  */
 const BOSS_TIERS = {
-  trash: { label: "Trash mob", hp: 1, color: "#9aa4b2" },
-  elite: { label: "Elite",     hp: 2, color: "#a335ee" },
-  raid:  { label: "Raid boss", hp: 4, color: "#ff8000" },
+  trash: { label: "Trash mob", hp: 100, color: "#9aa4b2" },
+  elite: { label: "Elite",     hp: 220, color: "#a335ee" },
+  raid:  { label: "Raid boss", hp: 500, color: "#ff8000" },
 };
-// A looted (won) drop deals a full hit; an unclaimed drop only chips away.
-const DMG_LOOTED = 1;
-const DMG_UNCLAIMED = 0.5;
+// Damage a resolved step deals, by its rarity (priority): heavier fixes hit
+// harder. Only owned steps count; one everyone passed on deals no damage.
+const STEP_DAMAGE = { poor: 15, common: 30, uncommon: 50, rare: 80, epic: 120, legendary: 200 };
+function stepDamage(rarity, owned) {
+  return owned ? (STEP_DAMAGE[rarity] || STEP_DAMAGE.uncommon) : 0;
+}
+// Bosses saved before health was in hit points (1/2/4 "drops to kill") are
+// rescaled to the current pools, keeping the same fraction of health left.
+function rescaleBoss(boss) {
+  if (!boss || !BOSS_TIERS[boss.tier] || boss.hpMax > 4) return boss;
+  const hpMax = BOSS_TIERS[boss.tier].hp;
+  return { ...boss, hpMax, hp: Math.round((boss.hp / boss.hpMax) * hpMax) };
+}
 // Bag slots: the most open (not done) tasks one player can own at once.
 // Completing a task frees its slot. A full player can't Need/Greed.
 const MAX_SLOTS = 6;
@@ -99,7 +108,7 @@ function load() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return defaultState();
     const parsed = JSON.parse(raw);
-    return { ...defaultState(), ...parsed };
+    return { ...defaultState(), ...parsed, boss: rescaleBoss(parsed.boss) || null };
   } catch {
     return defaultState();
   }
@@ -171,11 +180,11 @@ function renderBoss() {
     ${boss.desc ? `<div class="boss-desc-text">${escapeHtml(boss.desc)}</div>` : ""}
     <div class="boss-hpwrap">
       <div class="boss-hp" style="width:${pct}%;"></div>
-      <div class="boss-hptext">${boss.slain ? "DEFEATED" : `${pct}% HP`}</div>
+      <div class="boss-hptext">${boss.slain ? "DEFEATED" : `${Math.ceil(boss.hp)} / ${boss.hpMax} HP`}</div>
     </div>
     ${boss.slain
       ? `<div class="boss-slain-line">${slainLine(boss.name, countBossLoot(boss.id))}</div>`
-      : `<div class="boss-sub">Propose remediation steps. Every resolved step damages the boss — owned fixes hit hardest.</div>`}
+      : `<div class="boss-sub">Propose remediation steps. Every step someone owns damages the boss, and weightier fixes hit harder.</div>`}
     ${renderRemediationPlan(boss)}
   `;
 }
@@ -295,6 +304,7 @@ function renderResult() {
 
   resultBanner.innerHTML = `
     <div class="winner-line">${headline}</div>
+    ${damageLine(res)}
     <div class="roll-detail">${rollRows}</div>
   `;
 }
@@ -461,10 +471,12 @@ function endBoss() {
   render();
 }
 
-// Damage the active boss after a drop resolves. Won drops hit full; passes chip.
+// Damage the active boss after a drop resolves. Only owned (won) drops hit.
+// Returns the damage dealt, or null if there was no live boss to hit.
 function damageBoss(amount) {
   const boss = state.boss;
-  if (!boss || boss.slain) return;
+  if (!boss || boss.slain) return null;
+  if (!amount) return 0; // a passed-over step doesn't touch the boss
   boss.hp = Math.max(0, boss.hp - amount);
   // flash the health bar
   bossEl.classList.remove("hit");
@@ -474,6 +486,7 @@ function damageBoss(amount) {
     boss.slain = true;
     showBossToast(boss);
   }
+  return amount;
 }
 
 function dropItem(item) {
@@ -595,8 +608,8 @@ function resolveDrop() {
     });
   }
 
-  // Damage the boss: a won drop lands a full hit, an all-pass only chips away.
-  damageBoss(winner ? DMG_LOOTED : DMG_UNCLAIMED);
+  // Damage the boss by the step's rarity. Passed-over steps deal none.
+  state.lastResult.damage = damageBoss(stepDamage(drop.item.rarity, !!winner));
 
   render();
 }
@@ -901,6 +914,12 @@ function escapeHtml(str) {
 }
 function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 function plural(n, one, many) { return `${n} ${n === 1 ? one : many}`; }
+// "Dealt N damage" under a resolved drop, or nothing if no live boss was hit.
+function damageLine(res) {
+  if (res.damage == null) return "";
+  if (!res.damage) return `<div class="damage-line muted">No damage. Nobody took ownership of it.</div>`;
+  return `<div class="damage-line">${icon("swords")} Dealt <b>${res.damage}</b> damage</div>`;
+}
 // Victory line under a slain boss, worded as loot rather than tasks.
 function slainLine(bossName, looted) {
   const name = escapeHtml(bossName);
