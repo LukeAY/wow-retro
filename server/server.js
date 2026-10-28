@@ -58,6 +58,18 @@ const BOSS_TIERS = {
 };
 const DMG_LOOTED = 1;
 const DMG_UNCLAIMED = 0.5;
+// Bag slots: the most open (not done) tasks one player can own at once.
+// Completing a task frees its slot. A full player can't Need/Greed.
+const MAX_SLOTS = 6;
+function slotsUsed(room, memberId) {
+  return room.log.filter((t) => t.ownerId === memberId && !t.passedOver && !t.done).length;
+}
+// Backlog items nobody owns yet. Owned log entries carry the item's id as
+// stepId; passed-over items have no owner, so they stay droppable.
+function unclaimedLoot(room) {
+  const claimed = new Set(room.log.filter((t) => !t.passedOver).map((t) => t.stepId));
+  return room.lootTable.filter((l) => !claimed.has(l.id));
+}
 /**
  * World of Warcraft: Forever race/class matrix (single source of truth).
  * Classic's 8 races + the two Skyborne allied-race variants, including the
@@ -251,6 +263,7 @@ function viewFor(room, client) {
       myChoice,
     },
     lootTable: room.lootTable,
+    maxSlots: MAX_SLOTS,
     members: room.members.map((m) => ({
       id: m.id,
       name: m.name,
@@ -262,6 +275,7 @@ function viewFor(room, client) {
       claimed: !!m.clientId,
       // only reveal a member's own choice to that member; others just see "has voted"
       hasVoted: room.activeDrop ? !!room.activeDrop.choices[m.id] : false,
+      slotsUsed: slotsUsed(room, m.id),
     })),
     boss: room.boss,
     bossLog: room.bossLog || [],
@@ -312,13 +326,19 @@ function resolveDrop(room) {
   const drop = room.activeDrop;
   if (!drop) return;
 
-  const rolls = room.members.map((m) => ({
-    memberId: m.id,
-    name: m.name,
-    realName: m.realName || "",
-    choice: drop.choices[m.id] || "pass",
-    roll: null,
-  }));
+  // A player whose bags filled up after voting (e.g. a task un-ticked) is
+  // treated as passing, so nobody can exceed MAX_SLOTS.
+  const rolls = room.members.map((m) => {
+    const bagsFull = slotsUsed(room, m.id) >= MAX_SLOTS;
+    return {
+      memberId: m.id,
+      name: m.name,
+      realName: m.realName || "",
+      choice: bagsFull ? "pass" : (drop.choices[m.id] || "pass"),
+      bagsFull,
+      roll: null,
+    };
+  });
 
   const needers = rolls.filter((r) => r.choice === "need");
   const greeders = rolls.filter((r) => r.choice === "greed");
@@ -647,10 +667,12 @@ const handlers = {
     if (!room || !isFacilitator(room, client)) return;
     if (!room.boss || room.boss.slain) return sendError(ws, "Pull a boss before dropping loot.");
     if (room.lootTable.length === 0) return sendError(ws, "Loot table is empty.");
+    const pool = unclaimedLoot(room);
+    if (pool.length === 0) return sendError(ws, "Every backlog item has already been claimed.");
     let item;
-    if (msg.lootId) item = room.lootTable.find((l) => l.id === msg.lootId);
-    else item = room.lootTable[randomInt(room.lootTable.length)];
-    if (!item) return sendError(ws, "Item not found.");
+    if (msg.lootId) item = pool.find((l) => l.id === msg.lootId);
+    else item = pool[randomInt(pool.length)];
+    if (!item) return sendError(ws, "That item has already been claimed or no longer exists.");
     room.activeDrop = { id: randomUUID(), item: { ...item }, choices: {} };
     room.lastResult = null;
     // if this backlog item corresponds to a remediation step, mark it dropped
@@ -671,6 +693,9 @@ const handlers = {
     if (!memberId) return sendError(ws, "Claim a party slot before voting.");
     const valid = ["need", "greed", "pass"];
     if (!valid.includes(msg.choice)) return;
+    if (msg.choice !== "pass" && slotsUsed(room, memberId) >= MAX_SLOTS) {
+      return sendError(ws, `Your bags are full (${MAX_SLOTS}/${MAX_SLOTS}). Complete a task to free a slot.`);
+    }
     const current = room.activeDrop.choices[memberId];
     if (current === msg.choice) delete room.activeDrop.choices[memberId]; // toggle off
     else room.activeDrop.choices[memberId] = msg.choice;

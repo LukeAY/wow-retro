@@ -30,6 +30,18 @@ const BOSS_TIERS = {
 // A looted (won) drop deals a full hit; an unclaimed drop only chips away.
 const DMG_LOOTED = 1;
 const DMG_UNCLAIMED = 0.5;
+// Bag slots: the most open (not done) tasks one player can own at once.
+// Completing a task frees its slot. A full player can't Need/Greed.
+const MAX_SLOTS = 6;
+function slotsUsed(memberId) {
+  return state.log.filter((t) => t.ownerId === memberId && !t.passedOver && !t.done).length;
+}
+// Backlog items nobody owns yet. Owned log entries carry the item's id as
+// stepId; passed-over items have no owner, so they stay droppable.
+function unclaimedLoot() {
+  const claimed = new Set(state.log.filter((t) => !t.passedOver).map((t) => t.stepId));
+  return state.lootTable.filter((l) => !claimed.has(l.id));
+}
 
 // Format a copper amount as WoW gold/silver/copper markup.
 function formatGold(copper) {
@@ -162,7 +174,7 @@ function renderBoss() {
       <div class="boss-hptext">${boss.slain ? "DEFEATED" : `${pct}% HP`}</div>
     </div>
     ${boss.slain
-      ? `<div class="boss-slain-line">&#9733; ${escapeHtml(boss.name)} has been defeated! The party claimed ${countBossLoot(boss.id)} remediation step(s).</div>`
+      ? `<div class="boss-slain-line">${slainLine(boss.name, countBossLoot(boss.id))}</div>`
       : `<div class="boss-sub">Propose remediation steps. Every resolved step damages the boss — owned fixes hit hardest.</div>`}
     ${renderRemediationPlan(boss)}
   `;
@@ -195,7 +207,7 @@ function renderRemediationPlan(boss) {
   }).join("");
   return `
     <div class="rem-plan">
-      <div class="rem-plan-head">Remediation plan &mdash; ${steps.length} step(s) proposed</div>
+      <div class="rem-plan-head">Remediation plan &mdash; ${plural(steps.length, "step", "steps")} proposed</div>
       <ul class="rem-plan-list">${rows}</ul>
     </div>`;
 }
@@ -207,7 +219,7 @@ function renderActiveDrop() {
     const hint = !boss
       ? "The dungeon is quiet. Pull a boss — a problem worth tackling — to begin."
       : boss.slain
-        ? "The boss lies defeated. Pull the next one, or end the encounter."
+        ? "The boss lies slain. Pull the next one, or end the encounter."
         : "The boss is engaged! Propose a remediation step above (or drop from the backlog) — each resolved drop damages it.";
     activeDropEl.className = "active-drop empty";
     activeDropEl.innerHTML = `<p class="empty-hint">${hint}</p>`;
@@ -296,6 +308,8 @@ function renderParty() {
     const choice = state.activeDrop ? state.activeDrop.choices[m.id] : null;
     const resolved = state.lastResult && state.activeDrop && state.lastResult.dropId === state.activeDrop.id;
     const votingOpen = !!state.activeDrop && !resolved;
+    const used = slotsUsed(m.id);
+    const bagsFull = used >= MAX_SLOTS;
 
     const panel = document.createElement("div");
     panel.className = "member";
@@ -308,7 +322,7 @@ function renderParty() {
     if (resolved) {
       const rw = state.lastResult.rolls.find((x) => x.memberId === m.id);
       if (rw) {
-        if (rw.choice === "pass") rollLine = "Passed";
+        if (rw.choice === "pass") rollLine = rw.bagsFull ? "Passed (bags full)" : "Passed";
         else rollLine = `${cap(rw.choice)} roll: ${rw.roll}` + (rw.memberId === state.lastResult.winnerId ? ` <span class="win-tag">&#9733; WON</span>` : "");
       }
     }
@@ -324,11 +338,15 @@ function renderParty() {
         </div>
       </div>
       <div class="choice-row">
-        <button class="choice-btn ${choice === "need" ? "active" : ""}" data-choice="need" data-member="${m.id}" ${votingOpen ? "" : "disabled"}>Need</button>
-        <button class="choice-btn ${choice === "greed" ? "active" : ""}" data-choice="greed" data-member="${m.id}" ${votingOpen ? "" : "disabled"}>Greed</button>
+        <button class="choice-btn ${choice === "need" ? "active" : ""}" data-choice="need" data-member="${m.id}" ${votingOpen && !bagsFull ? "" : "disabled"}>Need</button>
+        <button class="choice-btn ${choice === "greed" ? "active" : ""}" data-choice="greed" data-member="${m.id}" ${votingOpen && !bagsFull ? "" : "disabled"}>Greed</button>
         <button class="choice-btn ${choice === "pass" ? "active" : ""}" data-choice="pass" data-member="${m.id}" ${votingOpen ? "" : "disabled"}>Pass</button>
       </div>
       <div class="member-roll">${rollLine}</div>
+      <div class="member-bags">
+        ${bagSlots(myTasks.filter((t) => !t.done), MAX_SLOTS)}
+        ${bagsFull ? `<div class="member-bags-label full">Bags full &mdash; complete a task to free a slot</div>` : ""}
+      </div>
       <div class="member-tasks">
         ${myTasks.map((t) => `
           <div class="mini-task ${t.done ? "done" : ""}">
@@ -474,13 +492,19 @@ function dropRandom() {
     openModal("#modal-config");
     return;
   }
-  const item = state.lootTable[Math.floor(Math.random() * state.lootTable.length)];
+  const pool = unclaimedLoot();
+  if (pool.length === 0) {
+    alert("Every backlog item has already been claimed.");
+    return;
+  }
+  const item = pool[Math.floor(Math.random() * pool.length)];
   dropItem(item);
 }
 
 function setChoice(memberId, choice) {
   if (!state.activeDrop) return;
   if (state.lastResult && state.lastResult.dropId === state.activeDrop.id) return; // already resolved
+  if (choice !== "pass" && slotsUsed(memberId) >= MAX_SLOTS) return; // bags full
   const current = state.activeDrop.choices[memberId];
   // clicking the same choice again clears it (undecided)
   state.activeDrop.choices[memberId] = current === choice ? undefined : choice;
@@ -499,12 +523,18 @@ function resolveDrop() {
   const drop = state.activeDrop;
   if (!drop) return;
 
-  const rolls = state.party.map((m) => ({
-    memberId: m.id,
-    name: m.name,
-    choice: drop.choices[m.id] || "pass",
-    roll: null,
-  }));
+  // A player whose bags filled up after voting (e.g. a task un-ticked) is
+  // treated as passing, so nobody can exceed MAX_SLOTS.
+  const rolls = state.party.map((m) => {
+    const bagsFull = slotsUsed(m.id) >= MAX_SLOTS;
+    return {
+      memberId: m.id,
+      name: m.name,
+      choice: bagsFull ? "pass" : (drop.choices[m.id] || "pass"),
+      bagsFull,
+      roll: null,
+    };
+  });
 
   const needers = rolls.filter((r) => r.choice === "need");
   const greeders = rolls.filter((r) => r.choice === "greed");
@@ -625,7 +655,7 @@ function showBossToast(boss) {
       <div class="toast-item">[${escapeHtml(boss.name)}]</div>
       <div class="toast-value">
         <span class="rarity-label">${tier.label}</span>
-        <span class="coins">${looted} item(s) looted</span>
+        <span class="coins">${plural(looted, "item", "items")} looted</span>
       </div>
       <div class="toast-winner">Victory!</div>
     </div>
@@ -766,7 +796,12 @@ function renderManualDropModal() {
     list.innerHTML = `<li class="muted" style="justify-content:center;">Add items to the loot table first.</li>`;
     return;
   }
-  state.lootTable.forEach((l) => {
+  const pool = unclaimedLoot();
+  if (pool.length === 0) {
+    list.innerHTML = `<li class="muted" style="justify-content:center;">Every backlog item has already been claimed.</li>`;
+    return;
+  }
+  pool.forEach((l) => {
     const r = RARITY[l.rarity];
     const li = document.createElement("li");
     li.innerHTML = `
@@ -865,6 +900,14 @@ function escapeHtml(str) {
   );
 }
 function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+function plural(n, one, many) { return `${n} ${n === 1 ? one : many}`; }
+// Victory line under a slain boss, worded as loot rather than tasks.
+function slainLine(bossName, looted) {
+  const name = escapeHtml(bossName);
+  return looted
+    ? `&#9733; ${name} has been slain! The party claimed ${plural(looted, "piece", "pieces")} of loot.`
+    : `&#9733; ${name} has been slain, but the party left empty-handed.`;
+}
 
 /* ---------------- Event wiring ---------------- */
 

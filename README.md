@@ -187,6 +187,11 @@ step or backlog item without a live boss on the table.
 - If **nobody needs**, Greeders roll instead.
 - If **everyone passes**, the item is unclaimed.
 - Ties on the top roll re-roll only the tied players until broken.
+- **Bags hold 6.** Each player can own at most 6 open tasks at once (shown as
+  `Bags n/6` on their panel). With full bags you can only Pass, and anyone
+  whose bags are full at resolve time is counted as passing. Ticking a task
+  done frees its slot. Change `MAX_SLOTS` in `server/server.js` (and `app.js`
+  for local mode) to adjust.
 
 ## Rarity = priority = value
 

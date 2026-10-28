@@ -336,7 +336,7 @@ function renderBoss() {
       <div class="boss-hptext">${boss.slain ? "DEFEATED" : `${pct}% HP`}</div>
     </div>
     ${boss.slain
-      ? `<div class="boss-slain-line">&#9733; ${escapeHtml(boss.name)} has been defeated! The party claimed ${looted} remediation step(s).</div>`
+      ? `<div class="boss-slain-line">${slainLine(boss.name, looted)}</div>`
       : `<div class="boss-sub">Propose remediation steps. Every resolved step damages the boss — owned fixes hit hardest.</div>`}
     ${renderRemediationPlan(boss)}`;
 }
@@ -391,7 +391,7 @@ function renderRemediationPlan(boss) {
   const sub = pending ? ` &mdash; ${pending} awaiting a drop` : "";
   return `
     <div class="rem-plan">
-      <div class="rem-plan-head">Remediation plan &mdash; ${steps.length} step(s) proposed${sub}</div>
+      <div class="rem-plan-head">Remediation plan &mdash; ${plural(steps.length, "step", "steps")} proposed${sub}</div>
       <ul class="rem-plan-list">${rows}</ul>
     </div>`;
 }
@@ -413,7 +413,7 @@ function renderActiveDrop() {
     if (!boss) {
       hint = isFac ? "The dungeon is quiet. Pull a boss — a problem worth tackling — to begin." : "The dungeon is quiet. Waiting for the facilitator to pull a boss…";
     } else if (boss.slain) {
-      hint = isFac ? "The boss lies defeated. Pull the next one, or end the encounter." : "The boss lies defeated. Waiting for the facilitator…";
+      hint = isFac ? "The boss lies slain. Pull the next one, or end the encounter." : "The boss lies slain. Waiting for the facilitator…";
     } else {
       hint = isFac
         ? "The boss is engaged! Anyone can propose remediation steps; drop one from the plan below (or from the backlog) to roll for it."
@@ -449,13 +449,17 @@ function renderMyVote() {
   }
 
   bar.classList.remove("hidden");
+  const me = view.members.find((m) => m.id === view.you.memberId);
+  const bagsFull = !!me && me.slotsUsed >= view.maxSlots;
   bar.querySelectorAll("[data-mychoice]").forEach((b) => {
-    b.disabled = false;
+    b.disabled = bagsFull && b.getAttribute("data-mychoice") !== "pass";
     b.classList.toggle("active", view.you.myChoice === b.getAttribute("data-mychoice"));
   });
-  hint.textContent = view.you.myChoice
-    ? `You chose ${cap(view.you.myChoice)}. Click again to undo.`
-    : "Your choice is hidden from others until the facilitator resolves.";
+  hint.textContent = bagsFull
+    ? `Your bags are full (${view.maxSlots}/${view.maxSlots}). Complete a task to free a slot.`
+    : view.you.myChoice
+      ? `You chose ${cap(view.you.myChoice)}. Click again to undo.`
+      : "Your choice is hidden from others until the facilitator resolves.";
 }
 
 function renderTally() {
@@ -488,7 +492,8 @@ function renderResult() {
   const rows = res.rolls.map((rw) => {
     const win = rw.memberId === res.winnerId ? ` <span class="win-tag">&#9733; WIN</span>` : "";
     const who = rw.realName ? ` <span class="real-name">(${escapeHtml(rw.realName)})</span>` : "";
-    const txt = rw.choice === "pass" ? "passed" : `${cap(rw.choice)} &mdash; rolled <b>${rw.roll}</b>`;
+    const txt = rw.choice === "pass" ? (rw.bagsFull ? "passed (bags full)" : "passed")
+      : `${cap(rw.choice)} &mdash; rolled <b>${rw.roll}</b>`;
     return `<div class="roll-row">${escapeHtml(rw.name)}${who}: ${txt}${win}</div>`;
   }).join("");
   el.innerHTML = `<div class="winner-line">${headline}</div><div class="roll-detail">${rows}</div>`;
@@ -512,7 +517,7 @@ function renderParty() {
     if (view.resolved && view.lastResult) {
       const rw = view.lastResult.rolls.find((x) => x.memberId === m.id);
       if (rw) {
-        status = rw.choice === "pass" ? "Passed"
+        status = rw.choice === "pass" ? (rw.bagsFull ? "Passed (bags full)" : "Passed")
           : `${cap(rw.choice)} roll: ${rw.roll}` + (rw.memberId === view.lastResult.winnerId ? ` <span class="win-tag">&#9733; WON</span>` : "");
       }
     } else if (view.activeDrop) {
@@ -537,6 +542,7 @@ function renderParty() {
       `${(m.race ? m.race + " " : "")}${m.cls}`,
       m.faction || null,
       `Loot: ${openCount} open, ${doneCount} done`,
+      `Bags: ${m.slotsUsed}/${view.maxSlots}`,
     ].filter(Boolean);
     panel.title = tipParts.join(" \u2022 ");
 
@@ -554,6 +560,10 @@ function renderParty() {
         </div>
       </div>
       <div class="member-roll">${status}</div>
+      <div class="member-bags">
+        ${bagSlots(myTasks.filter((t) => !t.done), view.maxSlots)}
+        ${m.slotsUsed >= view.maxSlots ? `<div class="member-bags-label full">Bags full &mdash; complete a task to free a slot</div>` : ""}
+      </div>
       ${claimBtn}
       <div class="member-tasks">
         ${myTasks.map((t) => `
@@ -630,7 +640,7 @@ function showBossToast(boss) {
       <div class="toast-item">[${escapeHtml(boss.name)}]</div>
       <div class="toast-value">
         <span class="rarity-label">${tier.label}</span>
-        <span class="coins">${looted} item(s) looted</span>
+        <span class="coins">${plural(looted, "item", "items")} looted</span>
       </div>
       <div class="toast-winner">Victory!</div>
     </div>`;
@@ -752,8 +762,12 @@ function renderRosterModal() {
 
 function renderManualDropModal() {
   const list = $("#manual-drop-list");
-  list.innerHTML = view.lootTable.length ? "" : `<li class="muted" style="justify-content:center;">Add items to the loot table first.</li>`;
-  view.lootTable.forEach((l) => {
+  // hide items someone already owns (the server enforces this too)
+  const claimed = new Set(view.log.filter((t) => !t.passedOver).map((t) => t.stepId));
+  const pool = view.lootTable.filter((l) => !claimed.has(l.id));
+  list.innerHTML = pool.length ? ""
+    : `<li class="muted" style="justify-content:center;">${view.lootTable.length ? "Every backlog item has already been claimed." : "Add items to the loot table first."}</li>`;
+  pool.forEach((l) => {
     const r = RARITY[l.rarity];
     const li = document.createElement("li");
     li.innerHTML = `
@@ -829,6 +843,14 @@ function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 }
 function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+function plural(n, one, many) { return `${n} ${n === 1 ? one : many}`; }
+// Victory line under a slain boss, worded as loot rather than tasks.
+function slainLine(bossName, looted) {
+  const name = escapeHtml(bossName);
+  return looted
+    ? `&#9733; ${name} has been slain! The party claimed ${plural(looted, "piece", "pieces")} of loot.`
+    : `&#9733; ${name} has been slain, but the party left empty-handed.`;
+}
 
 /* ---------------- Event wiring ---------------- */
 

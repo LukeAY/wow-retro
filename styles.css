@@ -362,6 +362,54 @@ h1, h2, h3 {
   min-height: 16px;
 }
 .member-roll .win-tag { color: var(--legendary); font-weight: 700; }
+/* Bag slots: six inset item squares, filled with a loot bag per open task. */
+.bag-slots {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+  max-width: 216px;
+}
+.bag-slot {
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(145deg, #080604, #17110b);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,.8);
+}
+.bag-slot.filled {
+  --slot-color: var(--gold);
+  color: var(--slot-color);
+  border-color: var(--slot-color);
+  background:
+    radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--slot-color) 22%, transparent), transparent 70%),
+    #15100b;
+  box-shadow: inset 0 0 6px color-mix(in srgb, var(--slot-color) 35%, transparent);
+}
+.bag-slot.r-poor      { --slot-color: var(--poor); }
+.bag-slot.r-common    { --slot-color: var(--common); }
+.bag-slot.r-uncommon  { --slot-color: var(--uncommon); }
+.bag-slot.r-rare      { --slot-color: var(--rare); }
+.bag-slot.r-epic      { --slot-color: var(--epic); }
+.bag-slot.r-legendary { --slot-color: var(--legendary); }
+.bag-icon { width: 72%; height: 72%; }
+.bag-slot.fresh { animation: bag-pickup .45s ease-out; }
+@keyframes bag-pickup {
+  0%   { transform: scale(.4); opacity: 0; }
+  60%  { transform: scale(1.18); opacity: 1; }
+  100% { transform: scale(1); }
+}
+.bag-slots.full {
+  outline: 1px solid color-mix(in srgb, var(--need) 70%, transparent);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+.member-bags-label { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.member-bags-label.full { color: var(--need); font-weight: 700; }
+@media (prefers-reduced-motion: reduce) {
+  .bag-slot.fresh { animation: none; }
+}
 
 .member-tasks { display: flex; flex-direction: column; gap: 6px; }
 .member-tasks .mini-task {

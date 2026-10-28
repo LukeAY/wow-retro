@@ -12,6 +12,7 @@ const ICON_PATHS = {
   shield:  `<path d="M12 2 4 5v6c0 5 3.5 9 8 11 4.5-2 8-6 8-11V5z"/><path d="M12 6v12M7.5 10h9"/>`,
   person:  `<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.5 3.5-7 8-7s8 2.5 8 7"/>`,
   warning: `<path d="M12 3 2 20h20z"/><path d="M12 9v5M12 17h.01"/>`,
+  lootbag: `<path d="M8.5 8.5C5 11 3.5 14.5 3.5 17c0 2.5 1.8 4 4.5 4h8c2.7 0 4.5-1.5 4.5-4 0-2.5-1.5-6-5-8.5z"/><path d="M8.5 8.5 7 4.5c1.8-.8 3.2.4 5 .4s3.2-1.2 5-.4l-1.5 4"/><path d="M8.5 8.5h7"/><circle cx="12" cy="15" r="2.3"/>`,
 };
 
 // Race portraits, used for party avatars and the race picker.
@@ -35,6 +36,23 @@ function svgIcon(cls, paths) {
 // Inline UI icon, sized to the surrounding text.
 function icon(name) {
   return ICON_PATHS[name] ? svgIcon("ui-icon", ICON_PATHS[name]) : "";
+}
+
+// A player's bags: `max` slots, filled left to right with their open tasks.
+// Each filled slot shows a loot bag in the task's rarity colour. Slots for
+// tasks this page hasn't shown before get a one-off "picked up" pop.
+const seenBagTasks = new Set();
+function bagSlots(tasks, max) {
+  const full = tasks.length >= max;
+  let html = "";
+  for (let i = 0; i < max; i++) {
+    const t = tasks[i];
+    if (!t) { html += `<span class="bag-slot"></span>`; continue; }
+    const fresh = !seenBagTasks.has(t.id);
+    seenBagTasks.add(t.id);
+    html += `<span class="bag-slot filled r-${t.rarity}${fresh ? " fresh" : ""}" title="${escapeHtml(t.name)}">${svgIcon("bag-icon", ICON_PATHS.lootbag)}</span>`;
+  }
+  return `<div class="bag-slots${full ? " full" : ""}" aria-label="Bags ${tasks.length} of ${max}${full ? ", full" : ""}">${html}</div>`;
 }
 
 function raceIcon(race) {
