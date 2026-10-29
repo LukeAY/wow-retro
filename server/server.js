@@ -205,6 +205,7 @@ const handlers = {
   createCharacter(ws, client, msg) {
     const room = client.room;
     if (!room) return;
+    if (room.ended) return sendError(ws, "The raid has ended. You can still view the Raid Summary.");
     const check = validateCharacter(msg);
     if (check.error) return sendError(ws, check.error);
     const { fields } = check;

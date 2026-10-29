@@ -14,7 +14,7 @@
  * ========================================================================= */
 
 import {
-  RARITIES, RARITY, rarityRank, tacticDamage, bossHp, tierForHp, tierLabel, BOSS_STATUS,
+  RARITIES, RARITY, rarityRank, tacticDamage, BOSS_TIERS, tierForThreat, tierLabel, hpFromTactics, hpForDamage, BOSS_STATUS,
   THREAT_PER_PLAYER, validateThreatBallot, tallyThreat, nextBossByThreat,
   achievementRarity, tacticRarity, bagSize, bagsFull, slotsUsed, CHOICES, resolveRolls,
   RACE_CLASSES, RACE_NAMES, CLASS_NAMES, FACTION, isValidCombo, LIMITS,
@@ -49,6 +49,7 @@ export function createRoom({ code, persist = false, tacticRallies = true, now = 
     activeDrop: null,        // { id, item, choices: { memberId: choice } }
     lastResult: null,        // result of the current/previous drop
     log: [],                 // loot log: owned tasks and passed-over items
+    ended: null,             // { at } once the host ends the raid: read-only
     lastActivity: now,
   };
 }
@@ -71,20 +72,31 @@ export function migrateRoom(saved) {
     if (!b) return b;
     const out = { ...b };
     if (out.tier === "trash") out.tier = "normal";
-    if (!out.status) out.status = out.slain ? "slain" : (b === saved.boss ? "active" : "retreated");
+    if (!out.status) out.status = out.slain ? "slain" : (b === saved.boss ? "active" : "tactical");
     delete out.slain;
+    // "Retreated" (Call It) became Tactical Victory; one the raid ended mid-fight is Abandoned
+    if (out.status === "retreated") out.status = out.endedMidFight ? "abandoned" : "tactical";
+    delete out.endedMidFight;
     // bosses from before HP was in hit points had 1/2/4 "drops to kill"
     if (out.hpMax && out.hpMax <= 4) {
       const old = { normal: 100, elite: 220, raid: 500 }[out.tier] || 220;
       out.hp = Math.round((out.hp / out.hpMax) * old);
       out.hpMax = old;
     }
+    // bosses from before preparation were already fighting, at the HP they had
+    if (!out.phase) out.phase = "fight";
+    if (!BOSS_TIERS[out.tier]) out.tier = "elite";
     if (!("enrage" in out)) out.enrage = null;
     return out;
   };
   room.boss = fixBoss(saved.boss || null);
   room.bossLog = (saved.bossLog || []).map(fixBoss);
-  for (const b of [room.boss, ...room.bossLog]) if (b) migrateTactics(b);
+  delete room.hpScale; // from the threat-scaled HP model
+  for (const b of [room.boss, ...room.bossLog]) {
+    if (!b) continue;
+    migrateTactics(b);
+    if (b.phase === "fight") for (const t of b.tactics) if (!t.counted) t.counted = t.rarity;
+  }
   room.log = (saved.log || []).map(({ stepId, ...t }) => ({ ...t, tacticId: t.tacticId || stepId || null }));
   if (typeof saved.tacticRallies !== "boolean") room.tacticRallies = true;
   if (!saved.phase) room.phase = (room.boss || room.bossLog.length) ? "encounters" : "achievements";
@@ -140,6 +152,16 @@ function timerView(t, now) {
 
 const findMember = (room, id) => room.members.find((m) => m.id === id) || null;
 const isLive = (boss) => !!boss && boss.status === "active";
+const preparing = (boss) => isLive(boss) && boss.phase === "prep";
+
+// Once the fight is on, HP follows the party's plan: a new tactic, a backlog
+// drop or a rarity change adds (or takes away) its share of HP. A change
+// never kills the boss outright: that takes owned tactics.
+function adjustHp(boss, delta) {
+  if (!delta) return;
+  boss.hpMax = Math.max(1, boss.hpMax + delta);
+  boss.hp = Math.min(boss.hpMax, Math.max(1, boss.hp + delta));
+}
 const isResolved = (room) =>
   !!room.lastResult && !!room.activeDrop && room.lastResult.dropId === room.activeDrop.id;
 const liveVote = (room) => !!room.activeDrop && !isResolved(room);
@@ -205,6 +227,11 @@ function refreshTactics(room) {
     t.rarityFrom = t.override && t.override !== earned ? earned : null;
     const item = room.lootTable.find((l) => l.id === t.id);
     if (item) Object.assign(item, { rarity: t.rarity, rarityFrom: t.rarityFrom });
+    // after engaging, a rarity change moves HP as much as it moves damage
+    if (room.boss.phase === "fight" && t.counted !== t.rarity) {
+      adjustHp(room.boss, hpForDamage(tacticDamage(t.rarity, true) - tacticDamage(t.counted, true), room.boss.tier));
+      t.counted = t.rarity;
+    }
   }
 }
 
@@ -307,6 +334,17 @@ const actions = {
     return OK;
   },
 
+  // A player edits their own character (in local mode, whoever the screen
+  // is acting as). Same rules as creating one.
+  editCharacter(room, actor, msg) {
+    const me = findMember(room, actor.memberId);
+    if (!me) return err("Create a character first.");
+    const check = validateCharacter(msg);
+    if (check.error) return check;
+    updateMember(room, me, check.fields);
+    return OK;
+  },
+
   removeMember(room, actor, msg) {
     if (!actor.facilitator) return err("Only the host can remove party slots.");
     room.members = room.members.filter((m) => m.id !== msg.memberId);
@@ -341,6 +379,7 @@ const actions = {
       room.phaseTimer = updateTimer(room.phaseTimer, msg.action, msg.minutes, ctx.now);
     } else if (msg.target === "enrage") {
       if (!isLive(room.boss)) return err("There's no boss engaged.");
+      if (preparing(room.boss)) return err("Engage the boss before starting its enrage timer.");
       room.boss.enrage = updateTimer(room.boss.enrage, msg.action, msg.minutes, ctx.now);
     } else {
       return err("Unknown timer.");
@@ -505,10 +544,11 @@ const actions = {
     room.mobList = room.mobList.filter((m) => m !== topic);
     archiveBoss(room);
     const threat = room.threat.totals[topic.id] || 0;
-    const hpMax = bossHp(threat, topThreat(room));
+    // The party prepares first: HP is set from their tactics on Engage.
     room.boss = {
       id: ctx.uuid(), mobId: topic.id, name: topic.name, desc: topic.desc,
-      scoutedBy: topic.addedBy || "", threat, hpMax, hp: hpMax, tier: tierForHp(hpMax).tier,
+      scoutedBy: topic.addedBy || "", threat, tier: tierForThreat(threat, topThreat(room)),
+      phase: "prep", hpMax: null, hp: null,
       status: "active", tactics: [], enrage: null,
     };
     room.activeDrop = null;
@@ -516,12 +556,34 @@ const actions = {
     return OK;
   },
 
-  // The room agrees the problem is covered: the boss retreats.
-  callIt(room, actor) {
-    if (!actor.facilitator) return err("Only the host can call it.");
+  // Engage: preparation is over. HP is the tier's share of the damage the
+  // proposed tactics would deal if the party owned them all.
+  engageBoss(room, actor) {
+    if (!actor.facilitator) return err("Only the host can engage the boss.");
+    const boss = room.boss;
+    if (!isLive(boss)) return err("There's no boss to engage.");
+    if (!preparing(boss)) return err("The boss is already engaged.");
+    const need = BOSS_TIERS[boss.tier].minTactics;
+    if (boss.tactics.length < need) return err(`Propose at least ${need} tactics before engaging.`);
+    boss.hpMax = hpFromTactics(boss.tactics.map((t) => t.rarity), boss.tier);
+    boss.hp = boss.hpMax;
+    boss.phase = "fight";
+    for (const t of boss.tactics) t.counted = t.rarity;
+    return OK;
+  },
+
+  // Tactical Victory: the room agrees the problem is handled, whatever HP the
+  // boss has left. The host can leave a short note on why (shown on the Raid
+  // Summary and in the ledger).
+  tacticalVictory(room, actor, msg) {
+    if (!actor.facilitator) return err("Only the host can declare a Tactical Victory.");
     if (!isLive(room.boss)) return err("There's no boss engaged.");
+    if (preparing(room.boss)) return err("Engage the boss first.");
     if (liveVote(room)) return err("Resolve the current drop first.");
-    endEncounter(room, "retreated");
+    const note = text(msg.note, LIMITS.victoryNote, "the note");
+    if (note.error) return note;
+    endEncounter(room, "tactical");
+    room.boss.note = note.value;
     return OK;
   },
 
@@ -529,7 +591,7 @@ const actions = {
   clearStage(room, actor) {
     if (!actor.facilitator) return err("Only the host can clear the stage.");
     if (!room.boss) return OK;
-    if (isLive(room.boss)) return err("The boss is still engaged. Call it first.");
+    if (isLive(room.boss)) return err("The boss is still engaged. Defeat it or declare a Tactical Victory first.");
     archiveBoss(room);
     room.boss = null;
     room.activeDrop = null;
@@ -556,6 +618,11 @@ const actions = {
       dropped: false,
     };
     room.boss.tactics.push(tactic);
+    // a tactic proposed mid-fight adds its share of HP
+    if (room.boss.phase === "fight") {
+      tactic.counted = base;
+      adjustHp(room.boss, hpForDamage(tacticDamage(base, true), room.boss.tier));
+    }
     // also add it to the backlog so it's reusable; it shares the tactic's id
     room.lootTable.push({ id: tactic.id, name: tactic.name, rarity: base, desc: tactic.desc });
     refreshTactics(room);
@@ -580,6 +647,7 @@ const actions = {
   dropTactic(room, actor, msg, ctx) {
     if (!actor.facilitator) return err("Only the host can drop loot.");
     if (!isLive(room.boss)) return err("No live boss to attack.");
+    if (preparing(room.boss)) return err("Engage the boss before dropping loot.");
     if (liveVote(room)) return err("Resolve the current drop before dropping another.");
     const tactic = room.boss.tactics.find((t) => t.id === msg.tacticId);
     if (!tactic) return err("That tactic no longer exists.");
@@ -611,6 +679,7 @@ const actions = {
   drop(room, actor, msg, ctx) {
     if (!actor.facilitator) return err("Only the host can drop loot.");
     if (!isLive(room.boss)) return err("Pull a boss before dropping loot.");
+    if (preparing(room.boss)) return err("Engage the boss before dropping loot.");
     if (liveVote(room)) return err("Resolve the current drop before dropping another.");
     if (room.lootTable.length === 0) return err("The loot table is empty.");
     const pool = unclaimedLoot(room);
@@ -623,6 +692,9 @@ const actions = {
     room.lastResult = null;
     const tactic = room.boss.tactics.find((t) => t.id === item.id);
     if (tactic) tactic.dropped = true;
+    // anything that isn't part of this boss's plan adds its share of HP, so
+    // every drop is accounted for
+    else adjustHp(room.boss, hpForDamage(tacticDamage(item.rarity, true), room.boss.tier));
     return OK;
   },
 
@@ -653,6 +725,29 @@ const actions = {
     const t = room.log.find((x) => x.id === msg.taskId && !x.passedOver);
     if (!t) return err("That task no longer exists.");
     t.done = !t.done;
+    return OK;
+  },
+
+  /* ----- the end of the raid ----- */
+
+  // Ends the session for everyone and shows the Raid Summary. The room is
+  // read-only afterwards (see act). A boss still being fought is abandoned.
+  endRaid(room, actor, msg, ctx) {
+    if (!actor.facilitator) return err("Only the host can end the raid.");
+    if (room.ended) return OK;
+    if (liveVote(room)) return err("Resolve the current drop first.");
+    if (isLive(room.boss)) {
+      endEncounter(room, "abandoned");
+    }
+    room.phaseTimer = null;
+    room.ended = { at: ctx.now };
+    return OK;
+  },
+
+  // Undo an End Raid clicked by mistake.
+  reopenRaid(room, actor) {
+    if (!actor.facilitator) return err("Only the host can reopen the raid.");
+    room.ended = null;
     return OK;
   },
 
@@ -729,9 +824,13 @@ function resolveDrop(room, ctx) {
   }
 }
 
+// Once the raid has ended, only reopening it is allowed.
+const AFTER_THE_END = new Set(["endRaid", "reopenRaid"]);
+
 export function act(room, actor, msg, ctx) {
   const handler = actions[msg && msg.type];
   if (!handler) return err("Unknown action.");
+  if (room.ended && !AFTER_THE_END.has(msg.type)) return err("The raid has ended. The room is read-only now.");
   const result = handler(room, actor, msg, ctx);
   if (result && result.ok) room.lastActivity = ctx.now;
   return result;
@@ -811,19 +910,127 @@ export function viewFor(room, viewer, now, { revealChoices = false } = {}) {
     log: room.log,
     partySize: partySize(room),
     bagSize: roomBagSize(room),
+    ended: !!room.ended,
+    // Who rallied behind each achievement is revealed once the raid ends;
+    // tactic rallies stay private (they're only in the Loot Ledger).
+    summary: room.ended ? publicSummary(buildSummary(room)) : null,
+  };
+}
+
+function publicSummary(summary) {
+  return {
+    ...summary,
+    encounters: summary.encounters.map((e) => ({ ...e, tactics: e.tactics.map(({ rallies, ...t }) => t) })),
   };
 }
 
 function bossView(room, boss, viewer) {
   return {
     ...boss,
-    tactics: boss.tactics.map(({ rallies, base, override, legacy, ...t }) => ({
+    // HP doesn't exist until Engage; never send a number for it before then
+    ...(boss.phase === "prep" ? { hp: null, hpMax: null } : {}),
+    tactics: boss.tactics.map(({ rallies, base, override, legacy, counted, ...t }) => ({
       ...t,
       mine: !!viewer.memberId && t.proposedById === viewer.memberId,
       rallied: rallies.some((r) => r.memberId === viewer.memberId),
       overridden: !!override,
       rallyable: room.tacticRallies && !legacy && !t.dropped && isLive(boss),
     })),
+  };
+}
+
+/* ---------------- Raid Summary ---------------- */
+
+const personOf = (p) => ({ name: p.name, realName: p.realName || "" });
+const byRarity = (list) => list
+  .map((a, i) => ({ a, i }))
+  .sort((x, y) => rarityRank(y.a.rarity) - rarityRank(x.a.rarity) || x.i - y.i)
+  .map((x) => x.a);
+
+function allBosses(room) {
+  const bosses = [...room.bossLog];
+  if (room.boss && !bosses.some((b) => b.id === room.boss.id)) bosses.push(room.boss);
+  return bosses;
+}
+
+/**
+ * The whole session as data: team totals, every topic (fought or not),
+ * achievements and one sheet per party member. The Raid Summary screen and
+ * the Loot Ledger are both built from this. Totals are team-level only:
+ * nothing here ranks or scores individual players.
+ */
+export function buildSummary(room) {
+  const owned = room.log.filter((t) => !t.passedOver);
+  const bosses = allBosses(room);
+
+  const encounters = bosses.map((b) => {
+    const actions = owned.filter((t) => t.bossId === b.id);
+    return {
+      id: b.id, name: b.name, desc: b.desc || "", pulled: true,
+      status: b.status, statusLabel: BOSS_STATUS[b.status] || BOSS_STATUS.active,
+      tier: b.tier, tierLabel: tierLabel(b.tier), hpMax: b.hpMax ?? null,
+      hpLeft: b.hpMax == null ? null : b.status === "slain" ? 0 : Math.max(0, Math.ceil(b.hp || 0)),
+      threat: room.threat.revealed || b.threat ? (b.threat || 0) : null,
+      note: b.note || "",
+      actionsOpen: actions.filter((t) => !t.done).length,
+      actionsTotal: actions.length,
+      tactics: (b.tactics || []).map((a) => {
+        const win = owned.find((t) => t.tacticId === a.id);
+        const passed = !win && room.log.some((t) => t.tacticId === a.id && t.passedOver);
+        return {
+          id: a.id, name: a.name, rarity: a.rarity, rarityFrom: a.rarityFrom || null,
+          state: win ? "owned" : passed ? "passed" : "unowned",
+          owner: win ? { name: win.ownerName, realName: win.ownerReal || "" } : null,
+          done: win ? !!win.done : false,
+          rallies: a.rallies.map(personOf),
+        };
+      }),
+    };
+  }).concat(room.mobList.map((m) => ({
+    id: m.id, name: m.name, desc: m.desc || "", pulled: false,
+    status: "notPulled", statusLabel: BOSS_STATUS.notPulled,
+    threat: room.threat.revealed ? (room.threat.totals[m.id] || 0) : null,
+    raisedBy: { name: m.addedBy, realName: m.addedReal || "" },
+    note: "", actionsOpen: 0, actionsTotal: 0, tactics: [],
+  })));
+
+  const tacticIds = new Set(bosses.flatMap((b) => (b.tactics || []).map((a) => a.id)));
+  const otherLoot = owned.filter((t) => !tacticIds.has(t.tacticId)).map((t) => ({
+    id: t.id, name: t.name, rarity: t.rarity, rarityFrom: t.rarityFrom || null, done: !!t.done,
+    owner: { name: t.ownerName, realName: t.ownerReal || "" },
+  }));
+
+  const achievements = byRarity(room.achievements).map((a) => ({
+    id: a.id, title: a.title, detail: a.detail, rarity: a.rarity,
+    posters: a.posters.map(personOf), rallies: a.rallies.map(personOf),
+  }));
+
+  // Alphabetical by real name (character name for proxies without one), so
+  // the order says nothing about who did the most.
+  const sortKey = (m) => (m.realName || m.name).toLocaleLowerCase();
+  const characters = [...room.members]
+    .sort((a, b) => sortKey(a).localeCompare(sortKey(b)) || a.name.localeCompare(b.name))
+    .map((m) => ({
+      id: m.id, name: m.name, realName: m.realName || "", race: m.race, cls: m.cls,
+      faction: FACTION[m.race] || null,
+      owned: owned.filter((t) => t.ownerId === m.id)
+        .map((t) => ({ id: t.id, name: t.name, rarity: t.rarity, done: !!t.done })),
+      posted: achievements.filter((a) => room.achievements.find((x) => x.id === a.id).posters.some((p) => p.memberId === m.id))
+        .map((a) => ({ id: a.id, title: a.title, rarity: a.rarity })),
+      rallied: achievements.filter((a) => room.achievements.find((x) => x.id === a.id).rallies.some((r) => r.memberId === m.id))
+        .map((a) => ({ id: a.id, title: a.title, rarity: a.rarity })),
+    }));
+
+  return {
+    endedAt: room.ended ? room.ended.at : null,
+    totals: {
+      bossesSlain: bosses.filter((b) => b.status === "slain").length,
+      tacticalVictories: bosses.filter((b) => b.status === "tactical").length,
+      tacticsOwned: owned.length,
+      achievements: room.achievements.length,
+      gold: owned.reduce((sum, t) => sum + (RARITY[t.rarity] || RARITY.uncommon).value, 0),
+    },
+    encounters, otherLoot, achievements, characters,
   };
 }
 
@@ -836,57 +1043,49 @@ const rarityText = (item) => {
 };
 
 export function buildLedger(room) {
+  const summary = buildSummary(room);
   // Plain language for sharing outside the retro: tactics are "actions".
   const out = ["# Retro Action Plan"];
 
-  if (room.achievements.length) {
+  if (summary.achievements.length) {
     out.push("", "## Achievements");
-    const sorted = room.achievements
-      .map((a, i) => ({ a, i }))
-      .sort((x, y) => rarityRank(y.a.rarity) - rarityRank(x.a.rarity) || x.i - y.i)
-      .map((x) => x.a);
-    for (const a of sorted) {
+    for (const a of summary.achievements) {
       const rallied = a.rallies.length ? `; rallied by ${a.rallies.map(who).join(", ")}` : "";
       out.push(`- **${a.title}** (${RARITY[a.rarity].label}) — posted by ${a.posters.map(who).join(", ")}${rallied}`);
       if (a.detail) out.push(`  ${a.detail.replace(/\n+/g, " ")}`);
     }
   }
 
-  const bosses = [...room.bossLog];
-  if (room.boss && !bosses.some((b) => b.id === room.boss.id)) bosses.push(room.boss);
-  for (const b of bosses) {
-    const actions = room.log.filter((t) => t.bossId === b.id && !t.passedOver);
-    const open = actions.filter((t) => !t.done).length;
-    const count = actions.length ? `${open} of ${actions.length} actions open` : "no actions";
-    const threat = room.threat.revealed || b.threat ? `, ${b.threat || 0} threat` : "";
-    const hp = b.hpMax ? ` (${b.hpMax} HP${threat})` : "";
-    out.push("", `## ${b.name} — ${tierLabel(b.tier)}${hp} — ${BOSS_STATUS[b.status] || "In progress"}, ${count}`);
-    if (b.desc) out.push(`_${b.desc}_`);
-    const tactics = b.tactics || [];
-    if (tactics.length === 0) { out.push("_No actions proposed._"); continue; }
-    for (const a of tactics) {
-      const owned = room.log.find((t) => t.tacticId === a.id && !t.passedOver);
-      const passed = !owned && room.log.some((t) => t.tacticId === a.id && t.passedOver);
+  for (const e of summary.encounters.filter((x) => x.pulled)) {
+    const count = e.actionsTotal ? `${e.actionsOpen} of ${e.actionsTotal} actions open` : "no actions";
+    const threat = e.threat !== null ? `, ${e.threat} threat` : "";
+    const hp = ` (${e.hpMax != null ? `${e.hpMax} HP` : "HP never set"}${threat})`;
+    // a boss that wasn't slain says how much HP it had left
+    const left = e.status !== "slain" && e.hpMax != null ? ` (${e.hpLeft} of ${e.hpMax} HP left)` : "";
+    out.push("", `## ${e.name} — ${e.tierLabel}${hp} — ${e.statusLabel}${left}, ${count}`);
+    if (e.desc) out.push(`_${e.desc}_`);
+    if (e.note) out.push(`> Note: ${e.note}`);
+    if (e.tactics.length === 0) { out.push("_No actions proposed._"); continue; }
+    for (const a of e.tactics) {
       const rallied = a.rallies.length ? `; rallied by ${a.rallies.map(who).join(", ")}` : "";
-      if (owned) out.push(`- [${owned.done ? "x" : " "}] ${a.name} — ${rarityText(a)} — owner: ${who({ name: owned.ownerName, realName: owned.ownerReal })}${rallied}`);
-      else out.push(`- [ ] ${a.name} — ${rarityText(a)} — _${passed ? "passed over" : "proposed, unowned"}_${rallied}`);
+      if (a.owner) out.push(`- [${a.done ? "x" : " "}] ${a.name} — ${rarityText(a)} — owner: ${who(a.owner)}${rallied}`);
+      else out.push(`- [ ] ${a.name} — ${rarityText(a)} — _${a.state === "passed" ? "passed over" : "proposed, unowned"}_${rallied}`);
     }
   }
 
-  if (room.mobList.length) {
+  const notPulled = summary.encounters.filter((x) => !x.pulled);
+  if (notPulled.length) {
     out.push("", "## Not pulled");
-    for (const m of room.mobList) {
-      const threat = room.threat.revealed ? ` — ${room.threat.totals[m.id] || 0} threat` : "";
-      out.push(`- ${m.name}${threat} — raised by ${who({ name: m.addedBy, realName: m.addedReal })}`);
+    for (const m of notPulled) {
+      const threat = m.threat !== null ? ` — ${m.threat} threat` : "";
+      out.push(`- ${m.name}${threat} — raised by ${who(m.raisedBy)}`);
     }
   }
 
-  const known = new Set(bosses.flatMap((b) => (b.tactics || []).map((a) => a.id)));
-  const orphans = room.log.filter((t) => !t.passedOver && !known.has(t.tacticId));
-  if (orphans.length) {
+  if (summary.otherLoot.length) {
     out.push("", "## Other looted items");
-    for (const t of orphans) {
-      out.push(`- [${t.done ? "x" : " "}] ${t.name} — ${rarityText(t)} — owner: ${who({ name: t.ownerName, realName: t.ownerReal })}`);
+    for (const t of summary.otherLoot) {
+      out.push(`- [${t.done ? "x" : " "}] ${t.name} — ${rarityText(t)} — owner: ${who(t.owner)}`);
     }
   }
   return out.join("\n") + "\n";
