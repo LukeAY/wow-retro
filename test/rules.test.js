@@ -6,7 +6,7 @@ import {
   TACTIC_RALLY_UNCOMMON, TACTIC_RALLY_RARE, TACTIC_RALLY_EPIC, TACTIC_RALLY_LEGENDARY,
   slotsUsed, bagsFull, bagSize, TEAM_ACTION_BUDGET, MIN_BAG_SLOTS, tacticDamage, TACTIC_DAMAGE, TACTIC_BASE_DAMAGE, RARITY_BONUS,
   validateThreatBallot, tallyThreat, nextBossByThreat, THREAT_PER_PLAYER,
-  isValidCombo,
+  isValidCombo, RACE_NAMES, FACTION, replacementRace,
 } from "../shared/rules.js";
 
 // A dice stub that returns the given rolls in order.
@@ -230,4 +230,18 @@ test("the Forever race/class matrix is enforced", () => {
   assert.equal(isValidCombo("Undead", "Paladin"), true);
   assert.equal(isValidCombo("Night Elf", "Mage"), false);
   assert.equal(isValidCombo("Tauren", "Paladin"), false);
+});
+
+test("the eight Classic races, four per faction; High Order and Windshaper are gone", () => {
+  assert.deepEqual(RACE_NAMES, ["Human", "Dwarf", "Night Elf", "Gnome", "Orc", "Tauren", "Troll", "Undead"]);
+  assert.equal(RACE_NAMES.filter((r) => FACTION[r] === "Alliance").length, 4);
+  assert.equal(isValidCombo("High Order", "Mage"), false);
+  assert.equal(isValidCombo("Windshaper", "Druid"), false);
+});
+
+test("a removed race is replaced by the first race of its faction that fits the class", () => {
+  assert.equal(replacementRace("High Order", "Mage"), "Human");
+  assert.equal(replacementRace("High Order", "Druid"), "Night Elf");
+  assert.equal(replacementRace("Windshaper", "Druid"), "Tauren");
+  assert.equal(replacementRace("Windshaper", "Rogue"), "Orc");
 });

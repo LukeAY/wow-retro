@@ -30,12 +30,10 @@ const RACE_ICON_PATHS = {
   "Dwarf":      `<path d="M6.5 10a5.5 5.5 0 0 1 11 0z"/><path d="M12 10v3M10 12h.01M14 12h.01"/><path d="M7 11v4c0 4 2.5 7 5 7s5-3 5-7v-4"/><path d="M10 16v3M14 16v3"/>`,
   "Night Elf":  `<ellipse cx="12" cy="13" rx="4.5" ry="6"/><path d="M7.6 12 2 5l5.8 5.2M16.4 12 22 5l-5.8 5.2"/><path d="M9.5 13l1.5.5M14.5 13l-1.5.5"/>`,
   "Gnome":      `<circle cx="12" cy="13" r="7"/><circle cx="9.5" cy="11" r="2"/><circle cx="14.5" cy="11" r="2"/><path d="M5 11h2.5M16.5 11H19M9 16q3 2 6 0M9 6l1-2.5 1.5 2 1.5-2.5 1 2.5"/>`,
-  "High Order": `<circle cx="12" cy="13" r="5"/><ellipse cx="12" cy="5" rx="4" ry="1.3"/><path d="M7 12C3 11 2 8 2 6c2 2 4 2.5 5.5 4M17 12c4-1 5-4 5-6-2 2-4 2.5-5.5 4"/><path d="M10 13h.01M14 13h.01"/>`,
   "Orc":        `<path d="M6 9c0-3 3-5 6-5s6 2 6 5v5c0 4-3 7-6 7s-6-3-6-7z"/><path d="M12 4V2M8 10.5l3 1M16 10.5l-3 1M9 18l-.5-3M15 18l.5-3"/>`,
   "Tauren":     `<path d="M7 8C4 8 2 6.5 2 3.5c1.5 1.5 3 2 5.5 2.5M17 8c3 0 5-1.5 5-4.5-1.5 1.5-3 2-5.5 2.5"/><path d="M7 7h10v6c0 3-2 4-2 7H9c0-3-2-4-2-7z"/><circle cx="12" cy="20.5" r="1.2"/><path d="M10 11h.01M14 11h.01M11 16h.01M13 16h.01"/>`,
   "Troll":      `<ellipse cx="12" cy="13" rx="5" ry="6"/><path d="M10 7c0-2 1-4.5 2-4.5s2 2.5 2 4.5"/><path d="M7.2 11 1 9l6.3 4M16.8 11 23 9l-6.3 4"/><path d="M9.5 17.5c-1.5-.5-2.5-2-2.5-3.5M14.5 17.5c1.5-.5 2.5-2 2.5-3.5M10 12h.01M14 12h.01"/>`,
   "Undead":     `<path d="M6 11a6 6 0 0 1 12 0v3l-2 1v3H8v-3l-2-1z"/><circle cx="9.5" cy="11.5" r="1.5" fill="currentColor"/><circle cx="14.5" cy="11.5" r="1.5" fill="currentColor"/><path d="M12 13.5l-.8 1.5h1.6zM10 18v-2M12 18v-2M14 18v-2M8 18v2.5h8V18"/>`,
-  "Windshaper": `<circle cx="12" cy="13" r="5"/><path d="M9 8C8 5.5 8.5 3.5 10 2M12 8V2.5M15 8c1-2.5.5-4.5-1-6"/><path d="M1.5 12h3c1.5 0 1.5-2 0-2M1.5 15.5h3.5c1.5 0 1.5 2 0 2M22.5 14H19"/><path d="M10 13h.01M14 13h.01"/>`,
 };
 
 // Class emblems for the class picker (classes in the Forever race matrix).

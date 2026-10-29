@@ -474,6 +474,17 @@ test("when bags shrink, nothing is taken away but you can't win more until under
   assert.equal(ben().slotsUsed, 3);
 });
 
+test("characters saved with a removed race keep their class and faction under a new race", () => {
+  const room = migrateRoom({ code: "OLD5", members: [
+    { id: "a", name: "Sky", realName: "A", race: "High Order", cls: "Mage" },
+    { id: "b", name: "Wind", realName: "B", race: "Windshaper", cls: "Druid" },
+    { id: "c", name: "Plain", realName: "C", race: "Dwarf", cls: "Priest" },
+  ], log: [] });
+  assert.deepEqual(room.members.map((m) => `${m.race} ${m.cls}`), ["Human Mage", "Tauren Druid", "Dwarf Priest"]);
+  const s = setup(["Ana"]);
+  assert.match(act(s.room, s.as(s.m[0]), { type: "editCharacter", name: "X", realName: "X", race: "Windshaper", cls: "Druid" }, s.ctx).error, /cannot be a Druid/);
+});
+
 test("rooms saved before bag sizing treat slots without a real name as proxies", () => {
   const room = migrateRoom({ code: "OLD3", members: [
     { id: "a", name: "Ana", realName: "Ana R", race: "Human", cls: "Warrior" },

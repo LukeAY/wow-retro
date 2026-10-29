@@ -227,32 +227,37 @@ export function resolveRolls(entrants, rollD) {
 
 /**
  * World of Warcraft: Forever race/class matrix (single source of truth).
- * Classic's 8 races + the two Skyborne allied-race variants, including the
- * six Forever additions (Human Hunter, Dwarf Shaman, Gnome Priest, Orc Mage,
- * Troll Warlock, Undead Paladin). Skyborne is modelled as its two
- * faction-specific variants: High Order (Alliance) and Windshaper (Horde).
+ * Classic's 8 races, including the six Forever additions (Human Hunter,
+ * Dwarf Shaman, Gnome Priest, Orc Mage, Troll Warlock, Undead Paladin).
  */
 export const RACE_CLASSES = {
   // Alliance
-  "Human":      ["Warrior", "Paladin", "Hunter", "Rogue", "Priest", "Mage", "Warlock"],
-  "Dwarf":      ["Warrior", "Paladin", "Hunter", "Rogue", "Priest", "Shaman"],
-  "Night Elf":  ["Warrior", "Hunter", "Rogue", "Priest", "Druid"],
-  "Gnome":      ["Warrior", "Rogue", "Priest", "Mage", "Warlock"],
-  "High Order": ["Warrior", "Hunter", "Rogue", "Druid", "Mage"],
+  "Human":     ["Warrior", "Paladin", "Hunter", "Rogue", "Priest", "Mage", "Warlock"],
+  "Dwarf":     ["Warrior", "Paladin", "Hunter", "Rogue", "Priest", "Shaman"],
+  "Night Elf": ["Warrior", "Hunter", "Rogue", "Priest", "Druid"],
+  "Gnome":     ["Warrior", "Rogue", "Priest", "Mage", "Warlock"],
   // Horde
-  "Orc":        ["Warrior", "Hunter", "Rogue", "Shaman", "Warlock", "Mage"],
-  "Tauren":     ["Warrior", "Hunter", "Shaman", "Druid"],
-  "Troll":      ["Warrior", "Hunter", "Rogue", "Priest", "Mage", "Shaman", "Warlock"],
-  "Undead":     ["Warrior", "Rogue", "Priest", "Mage", "Warlock", "Paladin"],
-  "Windshaper": ["Warrior", "Hunter", "Rogue", "Druid", "Shaman"],
+  "Orc":       ["Warrior", "Hunter", "Rogue", "Shaman", "Warlock", "Mage"],
+  "Tauren":    ["Warrior", "Hunter", "Shaman", "Druid"],
+  "Troll":     ["Warrior", "Hunter", "Rogue", "Priest", "Mage", "Shaman", "Warlock"],
+  "Undead":    ["Warrior", "Rogue", "Priest", "Mage", "Warlock", "Paladin"],
 };
 
 export const FACTION = {
   "Human": "Alliance", "Dwarf": "Alliance", "Night Elf": "Alliance",
-  "Gnome": "Alliance", "High Order": "Alliance",
-  "Orc": "Horde", "Tauren": "Horde", "Troll": "Horde",
-  "Undead": "Horde", "Windshaper": "Horde",
+  "Gnome": "Alliance",
+  "Orc": "Horde", "Tauren": "Horde", "Troll": "Horde", "Undead": "Horde",
 };
+
+// Races that have been removed, by faction. Characters saved with one move
+// to the first race of the same faction that can be their class.
+export const RETIRED_RACES = { "High Order": "Alliance", "Windshaper": "Horde" };
+
+export function replacementRace(race, cls) {
+  const faction = RETIRED_RACES[race];
+  return Object.keys(RACE_CLASSES).find((r) => FACTION[r] === faction && RACE_CLASSES[r].includes(cls))
+    || Object.keys(RACE_CLASSES).find((r) => FACTION[r] === faction);
+}
 
 export const RACE_NAMES = Object.keys(RACE_CLASSES);
 

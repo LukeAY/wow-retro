@@ -23,8 +23,10 @@ npm start
 
 Then open:
 
-- **Online mode** (everyone on their own laptop): `http://localhost:3000/net.html`
-- **Local mode** (one shared screen): `http://localhost:3000/` or `/index.html`
+- **Online mode** (everyone on their own laptop): `http://localhost:3000/`
+  (also at `/net.html`)
+- **Local mode** (one shared screen): `http://localhost:3000/index.html`, or
+  **Single-screen mode** in the lobby
 
 During development, `npm run dev` restarts the server whenever you edit it.
 
@@ -59,7 +61,7 @@ The lobby puts joining first: most people arrive with a code or a link.
    (host) and get a 4-character room code.
 2. The facilitator clicks **Copy invite** (next to the room code in the top
    bar) and shares the link. The link looks like
-   `http://192.168.1.42:3000/net.html?room=ABCD`: opening it joins that room
+   `http://192.168.1.42:3000/?room=ABCD`: opening it joins that room
    straight away. If the room no longer exists, the lobby opens with the code
    filled in and says so.
 3. Everyone else opens the link, or types the code under **Join your party**
@@ -116,7 +118,7 @@ The header shows **Saved** or **Not saved**. Abandoned rooms (empty for
 ### Playing with remote teammates
 
 The server listens on your LAN, so people on the same network can use your
-machine's IP (e.g. `http://192.168.1.42:3000/net.html`). For remote folks,
+machine's IP (e.g. `http://192.168.1.42:3000/`). For remote folks,
 expose it with a tunnel such as `npx ngrok http 3000`; the client switches to
 `wss` automatically over HTTPS. Invite links use whatever address the
 facilitator opened the page with, so open it by the address your team will
@@ -431,11 +433,14 @@ engine and the browser:
 ## Races & classes (WoW: Forever)
 
 Character creation follows the **WoW: Forever** race/class matrix: the eight
-Classic races plus the two Skyborne variants (High Order for Alliance,
-Windshaper for Horde), including Forever's six new combos (Human Hunter, Dwarf
-Shaman, Gnome Priest, Orc Mage, Troll Warlock, Undead Paladin). The engine
-rejects illegal combinations, so a tampered client can't create, say, a Night
-Elf Mage.
+Classic races, including Forever's six new combos (Human Hunter, Dwarf Shaman,
+Gnome Priest, Orc Mage, Troll Warlock, Undead Paladin). The engine rejects
+illegal combinations, so a tampered client can't create, say, a Night Elf
+Mage.
+
+The High Order and Windshaper races have been removed. A character saved with
+one moves to the first race of the same faction that can be their class (a
+High Order Mage becomes Human, a Windshaper Druid becomes Tauren).
 
 | Faction  | Race        | Classes |
 | -------- | ----------- | ------- |
@@ -443,12 +448,10 @@ Elf Mage.
 | Alliance | Dwarf       | Warrior, Paladin, Hunter, Rogue, Priest, Shaman |
 | Alliance | Night Elf   | Warrior, Hunter, Rogue, Priest, Druid |
 | Alliance | Gnome       | Warrior, Rogue, Priest, Mage, Warlock |
-| Alliance | High Order  | Warrior, Hunter, Rogue, Druid, Mage |
 | Horde    | Orc         | Warrior, Hunter, Rogue, Shaman, Warlock, Mage |
 | Horde    | Tauren      | Warrior, Hunter, Shaman, Druid |
 | Horde    | Troll       | Warrior, Hunter, Rogue, Priest, Mage, Shaman, Warlock |
 | Horde    | Undead      | Warrior, Rogue, Priest, Mage, Warlock, Paladin |
-| Horde    | Windshaper  | Warrior, Hunter, Rogue, Druid, Shaman |
 
 ## Accessibility
 

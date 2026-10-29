@@ -17,7 +17,7 @@ import {
   RARITIES, RARITY, rarityRank, tacticDamage, BOSS_TIERS, tierForThreat, tierLabel, hpFromTactics, hpForDamage, BOSS_STATUS,
   THREAT_PER_PLAYER, validateThreatBallot, tallyThreat, nextBossByThreat,
   achievementRarity, tacticRarity, bagSize, bagsFull, slotsUsed, CHOICES, resolveRolls,
-  RACE_CLASSES, RACE_NAMES, CLASS_NAMES, FACTION, isValidCombo, LIMITS,
+  RACE_CLASSES, RACE_NAMES, CLASS_NAMES, FACTION, isValidCombo, RETIRED_RACES, replacementRace, LIMITS,
 } from "./rules.js";
 
 /* ---------------- Phases ---------------- */
@@ -66,7 +66,8 @@ export function migrateRoom(saved) {
   // Proxy slots (added by the host) were the only ones without a real name.
   room.members = (saved.members || []).map((m) => {
     const proxy = typeof m.proxy === "boolean" ? m.proxy : !m.realName;
-    return { ...m, proxy, held: typeof m.held === "boolean" ? m.held : !proxy };
+    const race = RETIRED_RACES[m.race] ? replacementRace(m.race, m.cls) : m.race;
+    return { ...m, race, proxy, held: typeof m.held === "boolean" ? m.held : !proxy };
   });
   const fixBoss = (b) => {
     if (!b) return b;

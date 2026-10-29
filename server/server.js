@@ -30,7 +30,7 @@ const DATA_FILE = path.join(DATA_DIR, "rooms.json");
 // saved rooms in server/data, which hold real names) stays private.
 const app = express();
 const PUBLIC_FILES = ["index.html", "net.html", "styles.css", "icons.js", "net-client.js", "local-mode.js"];
-app.get("/", (_req, res) => res.sendFile(path.join(ROOT, "index.html")));
+app.get("/", (_req, res) => res.sendFile(path.join(ROOT, "net.html"))); // online mode is the default
 for (const file of PUBLIC_FILES) app.get(`/${file}`, (_req, res) => res.sendFile(path.join(ROOT, file)));
 app.use("/fonts", express.static(path.join(ROOT, "fonts")));
 app.use("/shared", express.static(path.join(ROOT, "shared")));
@@ -372,7 +372,7 @@ setInterval(pruneStaleRooms, 60 * 60 * 1000).unref(); // hourly cleanup
 
 server.listen(PORT, () => {
   console.log(`\n  Loot Council server running`);
-  console.log(`  Online:   http://localhost:${PORT}/net.html`);
-  console.log(`  Network:  share your LAN IP, e.g. http://<your-ip>:${PORT}/net.html`);
+  console.log(`  Online:   http://localhost:${PORT}/`);
+  console.log(`  Network:  share your LAN IP, e.g. http://<your-ip>:${PORT}/`);
   console.log(`  Local (single screen): http://localhost:${PORT}/index.html\n`);
 });
