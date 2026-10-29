@@ -15,12 +15,14 @@
 }
 
 :root {
-  /* WoW rarity colors */
+  /* WoW rarity colors. Rare and Epic are lightened from WoW's #0070dd and
+     #a335ee so text in them reaches 4.5:1 on every dark surface, including
+     the brightest tinted party panel. */
   --poor: #9d9d9d;
   --common: #ffffff;
   --uncommon: #1eff00;
-  --rare: #0070dd;
-  --epic: #a335ee;
+  --rare: #4396e6;
+  --epic: #bd6ff3;
   --legendary: #ff8000;
 
   /* warm stone, leather and iron instead of slate */
@@ -28,15 +30,16 @@
   --bg-2: #15100b;
   --panel: #1e1610;
   --panel-2: #2a1f15;
-  --border: #4a3923;
+  --border: #4a3923;        /* decorative edges only */
+  --field-border: #86693f;  /* edges of buttons and inputs: 3:1 or better */
   --gold: #c8aa6e;
   --gold-bright: #f0e6d2;
   --wow-yellow: #ffd100;   /* classic interface header text */
   --text: #ece2cc;
   --muted: #a3927a;
-  --need: #e0402b;
+  --need: #e76d5d;
   --greed: #e0b020;
-  --pass: #7a7066;
+  --pass: #918880;
 
   /* bevelled metal frame used by cards, modals, party and boss frames */
   --frame-edge: #7a5f34;
@@ -100,34 +103,35 @@ h1, h2, h3 {
 }
 .brand { display: flex; align-items: baseline; gap: 12px; }
 .brand-mark {
-  font-size: 26px;
+  font-size: 1.625rem;
   color: var(--gold);
   filter: drop-shadow(0 0 8px rgba(200,170,110,.5));
 }
 .brand h1 {
-  font-size: 24px;
+  font-size: 1.5rem;
   font-weight: 800;
   color: var(--gold-bright);
   letter-spacing: 2px;
   text-transform: uppercase;
   text-shadow: 0 0 14px rgba(200,170,110,.45), 0 2px 2px rgba(0,0,0,.6);
 }
-.brand-sub { color: var(--gold); font-size: 11px; text-transform: uppercase; letter-spacing: 3px; }
+.brand-sub { color: var(--gold); font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 3px; }
 .topbar-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .topbar-actions .btn { white-space: nowrap; }
 
 /* ---------- Buttons ---------- */
 .btn {
   font-family: "Cinzel", "Marcellus", Georgia, serif;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
   letter-spacing: .6px;
   padding: 9px 16px;
   border-radius: 3px;
-  border: 1px solid #6b5330;
+  border: 1px solid var(--field-border);
   background: linear-gradient(180deg, #3a2a1a, #1a120b);
   color: var(--gold-bright);
   cursor: pointer;
+  min-height: 36px;
   transition: all .15s ease;
   box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 2px 4px rgba(0,0,0,.4);
 }
@@ -202,12 +206,12 @@ h1, h2, h3 {
 }
 .section-head h2 {
   color: var(--wow-yellow);
-  font-size: 18px;
+  font-size: 1.125rem;
   text-transform: uppercase;
   letter-spacing: 1.5px;
   text-shadow: 0 1px 2px #000, 0 0 10px rgba(255,209,0,.15);
 }
-.muted { color: var(--muted); font-size: 13px; }
+.muted { color: var(--muted); font-size: 0.8125rem; }
 
 /* ---------- Stage ---------- */
 .stage-head {
@@ -220,12 +224,12 @@ h1, h2, h3 {
 }
 .stage-head h2 {
   color: var(--wow-yellow);
-  font-size: 20px;
+  font-size: 1.25rem;
   text-transform: uppercase;
   letter-spacing: 2px;
   text-shadow: 0 1px 2px #000, 0 0 12px rgba(255,209,0,.2);
 }
-.stage-controls { display: flex; gap: 8px; }
+.stage-controls { display: flex; flex-wrap: wrap; gap: 8px; }
 
 .active-drop {
   border: 1px dashed var(--border);
@@ -251,7 +255,7 @@ h1, h2, h3 {
   width: 58px; height: 58px;
   border-radius: 2px;
   display: grid; place-items: center;
-  font-size: 28px;
+  font-size: 1.75rem;
   border: 2px solid currentColor;
   flex-shrink: 0;
   background:
@@ -259,9 +263,9 @@ h1, h2, h3 {
     radial-gradient(circle at 50% 35%, #2b2218, #0a0705 80%);
   box-shadow: 0 0 0 1px #000, inset 0 0 0 1px #000, inset 0 0 10px rgba(0,0,0,.9), 0 0 14px -4px currentColor;
 }
-.drop-meta h3 { font-size: 18px; }
-.drop-rarity { font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px; }
-.drop-desc { color: var(--muted); font-size: 13px; margin-top: 4px; }
+.drop-meta h3 { font-size: 1.125rem; }
+.drop-rarity { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1.5px; }
+.drop-desc { color: var(--muted); font-size: 0.8125rem; margin-top: 4px; }
 
 @keyframes dropIn {
   0% { transform: translateY(-16px) scale(.96); opacity: 0; }
@@ -279,7 +283,7 @@ h1, h2, h3 {
   padding-top: 16px;
   border-top: 1px solid var(--border);
 }
-.vote-tally { display: flex; gap: 14px; font-size: 14px; }
+.vote-tally { display: flex; gap: 14px; font-size: 0.875rem; }
 .vote-tally span b { color: var(--gold-bright); }
 
 .result-banner {
@@ -293,8 +297,8 @@ h1, h2, h3 {
   box-shadow: var(--frame), inset 0 0 30px -20px var(--gold), 0 6px 20px -10px rgba(0,0,0,.6);
   animation: dropIn .4s ease;
 }
-.result-banner .winner-line { font-size: 16px; }
-.result-banner .roll-detail { color: var(--muted); font-size: 13px; margin-top: 8px; display: flex; flex-direction: column; gap: 2px; }
+.result-banner .winner-line { font-size: 1rem; }
+.result-banner .roll-detail { color: var(--muted); font-size: 0.8125rem; margin-top: 8px; display: flex; flex-direction: column; gap: 2px; }
 .result-banner .roll-detail .roll-row b { color: var(--text); }
 
 /* ---------- Party ---------- */
@@ -331,8 +335,10 @@ h1, h2, h3 {
   box-shadow: 0 0 0 2px #b8913f, 0 0 0 3px #3a2a14, 0 0 0 4px #000, inset 0 -6px 10px rgba(0,0,0,.35), 0 0 12px -3px var(--member-color, var(--gold));
 }
 .member-name {
+  font-family: inherit;
+  letter-spacing: normal;
   font-weight: 600;
-  font-size: 15px;
+  font-size: 0.9375rem;
   color: color-mix(in srgb, var(--member-color, var(--gold)) 85%, #fff);
 }
 .host-crown {
@@ -344,19 +350,20 @@ h1, h2, h3 {
 .you-star { margin-left: 6px; cursor: help; }
 .host-crown { cursor: help; }
 .host-crown .ui-icon { width: 1.1em; height: 1.1em; vertical-align: -0.15em; }
-.member-class { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+.member-class { font-size: 0.6875rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
 
 .choice-row { display: flex; gap: 6px; }
 .choice-btn {
   flex: 1;
   padding: 8px 0;
+  min-height: 32px;
   border-radius: 3px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--field-border);
   background: linear-gradient(180deg, #3a2a1a, #1a120b);
   color: var(--text);
   cursor: pointer;
   font-family: "Cinzel", Georgia, serif;
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: .5px;
   transition: all .12s ease;
@@ -364,17 +371,18 @@ h1, h2, h3 {
 }
 .choice-btn:hover:not(:disabled) { border-color: var(--gold); transform: translateY(-1px); }
 .choice-btn:disabled { opacity: .4; cursor: not-allowed; }
-.choice-btn[data-choice="need"].active { background: linear-gradient(180deg, #e0402b, #8a1a0f); border-color: #ff8a6a; color: #fff; }
-.choice-btn[data-choice="greed"].active { background: linear-gradient(180deg, #f0c030, #a07410); border-color: #ffe27a; color: #1a1206; }
-.choice-btn[data-choice="pass"].active { background: linear-gradient(180deg, #8a8076, #4a433c); border-color: #b0a69a; color: #fff; }
+.choice-btn:is([data-choice="need"], [data-mychoice="need"]).active { background: linear-gradient(180deg, #e0402b, #8a1a0f); border-color: #ff8a6a; color: #fff; }
+.choice-btn:is([data-choice="greed"], [data-mychoice="greed"]).active { background: linear-gradient(180deg, #f0c030, #a07410); border-color: #ffe27a; color: #1a1206; }
+.choice-btn:is([data-choice="pass"], [data-mychoice="pass"]).active { background: linear-gradient(180deg, #6b625a, #3d3731); border-color: #b0a69a; color: #fff; }
 
 .member-roll {
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--muted);
   min-height: 16px;
 }
 .member-roll .win-tag { color: var(--legendary); font-weight: 700; }
-/* Bag slots: six inset item squares, filled with a loot bag per open task. */
+/* Bag slots: one inset item square per slot (bag size follows party size),
+   filled with a loot bag per open task. */
 .bag-slots {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
@@ -412,20 +420,23 @@ h1, h2, h3 {
   60%  { transform: scale(1.18); opacity: 1; }
   100% { transform: scale(1); }
 }
-.bag-slots.full {
+.bag-slots.full, .bag-slots.over {
   outline: 1px solid color-mix(in srgb, var(--need) 70%, transparent);
   outline-offset: 3px;
   border-radius: 3px;
 }
-.member-bags-label { font-size: 11px; color: var(--muted); margin-top: 4px; }
-.member-bags-label.full { color: var(--need); font-weight: 700; }
+.member-bags-label { font-size: 0.75rem; color: var(--muted); margin-top: 4px; }
+.member-bags-label.full, .member-bags-label.over { color: var(--need); font-weight: 700; }
+/* Bags held beyond a shrunken limit: kept, but drawn dashed outside it. */
+.bag-slot.over { border: 2px dashed var(--need); }
 @media (prefers-reduced-motion: reduce) {
   .bag-slot.fresh { animation: none; }
 }
 
-.member-tasks { display: flex; flex-direction: column; gap: 6px; }
+.member-tasks { display: flex; flex-direction: column; gap: 6px; list-style: none; margin: 0; padding: 0; }
+.member-tasks label { cursor: pointer; }
 .member-tasks .mini-task {
-  font-size: 12px;
+  font-size: 0.75rem;
   padding: 6px 8px;
   border-radius: 3px;
   background: var(--bg-2);
@@ -448,8 +459,9 @@ h1, h2, h3 {
   border-radius: 3px;
 }
 .loot-log-list li.done .log-name { text-decoration: line-through; opacity: .55; }
-.log-name { font-weight: 600; flex: 1; }
-.log-owner { font-size: 13px; color: var(--muted); }
+.log-text { flex: 1; min-width: 0; }
+.log-name { font-weight: 600; }
+.log-owner { font-size: 0.8125rem; color: var(--muted); }
 .log-rarity-dot { width: 10px; height: 10px; border-radius: 1px; flex-shrink: 0; box-shadow: 0 0 0 1px #000; }
 
 /* ---------- Rarity helpers ---------- */
@@ -491,9 +503,9 @@ h1, h2, h3 {
   color: var(--wow-yellow);
   text-transform: uppercase;
   letter-spacing: 1.5px;
-  font-size: 17px;
+  font-size: 1.0625rem;
 }
-.modal-close { background: none; border: none; color: var(--muted); font-size: 24px; cursor: pointer; line-height: 1; }
+.modal-close { background: none; border: 1px solid transparent; border-radius: 3px; color: var(--muted); font-size: 1.5rem; cursor: pointer; line-height: 1; min-width: 32px; min-height: 32px; }
 .modal-close:hover { color: var(--text); }
 
 .editable-list { list-style: none; margin: 14px 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
@@ -507,13 +519,15 @@ h1, h2, h3 {
   border-radius: 3px;
 }
 .editable-list .li-name { flex: 1; font-weight: 600; }
-.editable-list .li-sub { font-size: 12px; color: var(--muted); }
-.editable-list .li-remove {
-  background: none; border: none; color: var(--muted); cursor: pointer; font-size: 18px;
+.editable-list .li-sub { font-size: 0.75rem; color: var(--muted); }
+.li-remove {
+  background: none; border: 1px solid transparent; border-radius: 3px; color: var(--muted); cursor: pointer;
+  font-size: 1.25rem; line-height: 1; min-width: 28px; min-height: 28px; flex-shrink: 0;
 }
+.li-remove:hover { color: var(--need); border-color: var(--field-border); }
 .editable-list .li-remove:hover { color: var(--need); }
 .editable-list .li-drop {
-  font-size: 12px; padding: 5px 10px;
+  font-size: 0.75rem; padding: 5px 10px;
 }
 
 .add-form { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
@@ -521,7 +535,7 @@ h1, h2, h3 {
   font: inherit;
   padding: 8px 10px;
   border-radius: 3px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--field-border);
   background: var(--bg-2);
   color: var(--text);
 }
@@ -535,23 +549,20 @@ h1, h2, h3 {
   font: inherit;
   padding: 8px 10px;
   border-radius: 3px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--field-border);
   background: var(--bg-2);
   color: var(--text);
   box-sizing: border-box;
   width: 100%;
 }
 .mob-form textarea { resize: vertical; }
-.mob-form-row { display: flex; gap: 8px; flex-wrap: wrap; }
-.mob-form-row select { flex: 1; width: auto; min-width: 180px; }
 .mob-list li { align-items: flex-start; }
 .mob-list .mob-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.mob-list .mob-tier-dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 6px; flex-shrink: 0; background: var(--mob-color); }
-.mob-list .mob-desc { font-size: 12px; color: var(--text); opacity: .8; overflow-wrap: anywhere; }
-.damage-line { font-size: 13px; color: var(--need); margin: 4px 0 2px; }
+.mob-list .mob-desc { font-size: 0.75rem; color: var(--text); opacity: .8; overflow-wrap: anywhere; }
+.damage-line { font-size: 0.8125rem; color: var(--need); margin: 4px 0 2px; }
 .damage-line.muted { color: var(--muted); }
 .damage-line b { color: var(--gold-bright); }
-.boss-scout { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.boss-scout { font-size: 0.75rem; color: var(--muted); margin-top: 4px; }
 
 /* ---------- WoW loot toast ---------- */
 .toast-stack {
@@ -605,7 +616,7 @@ h1, h2, h3 {
   flex-shrink: 0;
   border-radius: 2px;
   display: grid; place-items: center;
-  font-size: 24px;
+  font-size: 1.5rem;
   color: var(--toast-color);
   border: 2px solid var(--toast-color);
   background:
@@ -615,20 +626,20 @@ h1, h2, h3 {
 }
 .loot-toast .toast-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .loot-toast .toast-received {
-  font-size: 11px;
+  font-size: 0.6875rem;
   text-transform: uppercase;
   letter-spacing: 1.5px;
   color: var(--gold);
 }
 .loot-toast .toast-item {
-  font-size: 15px;
+  font-size: 0.9375rem;
   font-weight: 700;
   color: var(--toast-color);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.loot-toast .toast-winner { font-size: 12px; color: var(--muted); }
+.loot-toast .toast-winner { font-size: 0.75rem; color: var(--muted); }
 .loot-toast .toast-winner b { color: var(--text); }
 
 /* rarity border/glow driven by --toast-color */
@@ -668,7 +679,7 @@ h1, h2, h3 {
 
 /* Reclaim a dropped character, shown above character creation */
 .reclaim { margin: 14px 0 22px; }
-.reclaim-title { font-size: 15px; color: var(--wow-yellow); margin: 0 0 10px; }
+.reclaim-title { font-size: 0.9375rem; color: var(--wow-yellow); margin: 0 0 10px; }
 .reclaim-list { display: flex; flex-wrap: wrap; gap: 10px; }
 .reclaim-option {
   display: flex; align-items: center; gap: 10px;
@@ -687,10 +698,10 @@ h1, h2, h3 {
 .reclaim-option .race-icon { width: 24px; height: 24px; }
 .reclaim-text { display: flex; flex-direction: column; gap: 1px; }
 .reclaim-name { font-weight: 700; color: var(--member-color); }
-.reclaim-sub { font-size: 12px; color: var(--muted); }
+.reclaim-sub { font-size: 0.75rem; color: var(--muted); }
 .reclaim-or {
   display: flex; align-items: center; gap: 10px;
-  margin-top: 18px; font-size: 12px; text-transform: uppercase; letter-spacing: 2px;
+  margin-top: 18px; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 2px;
 }
 .reclaim-or::before, .reclaim-or::after { content: ""; flex: 1; border-top: 1px solid var(--border); }
 
@@ -699,14 +710,14 @@ h1, h2, h3 {
   display: flex; align-items: center; gap: 10px;
   margin: 26px 0 12px;
   font-family: "Cinzel", "Marcellus", Georgia, serif;
-  font-size: 15px; font-weight: 700; letter-spacing: .5px;
+  font-size: 0.9375rem; font-weight: 700; letter-spacing: .5px;
   color: var(--wow-yellow);
 }
 .pick-num {
   display: grid; place-items: center;
   width: 24px; height: 24px; border-radius: 50%;
   border: 1px solid var(--gold);
-  color: var(--gold-bright); font-size: 13px;
+  color: var(--gold-bright); font-size: 0.8125rem;
 }
 .faction-picker, .race-picker, .class-picker {
   display: grid;
@@ -726,7 +737,7 @@ h1, h2, h3 {
   background: var(--panel-2);
   color: var(--text);
   cursor: pointer;
-  font: inherit; font-size: 14px;
+  font: inherit; font-size: 0.875rem;
   transition: border-color .12s ease, transform .12s ease, box-shadow .12s ease;
 }
 .faction-option, .race-option { --pick-color: var(--faction-color, var(--gold)); }
@@ -753,7 +764,7 @@ h1, h2, h3 {
 .faction-option { padding: 20px 8px 16px; }
 .faction-option .pick-label {
   font-family: "Cinzel", "Marcellus", Georgia, serif;
-  font-size: 18px; font-weight: 700; letter-spacing: 1px;
+  font-size: 1.125rem; font-weight: 700; letter-spacing: 1px;
   color: color-mix(in srgb, var(--pick-color) 75%, #fff);
 }
 .pick-label { text-align: center; }
@@ -776,7 +787,7 @@ h1, h2, h3 {
 
 /* ---------- Toast value line (gold/silver/copper coins) ---------- */
 .loot-toast .toast-value {
-  font-size: 12px;
+  font-size: 0.75rem;
   margin-top: 2px;
   display: flex;
   align-items: center;
@@ -799,12 +810,12 @@ h1, h2, h3 {
 .faction-crest {
   display: inline-block;
   margin-right: 5px;
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1;
   filter: drop-shadow(0 0 3px rgba(0,0,0,.6));
 }
-.faction-crest.crest-alliance { color: #3a7bd5; }  /* Alliance blue */
-.faction-crest.crest-horde { color: #c8102e; }     /* Horde red */
+.faction-crest.crest-alliance { color: #6aa1f0; }  /* Alliance blue, 3:1+ as a graphic */
+.faction-crest.crest-horde { color: #ff5c6c; }     /* Horde red, 3:1+ as a graphic */
 
 
 /* a subtle faction accent strip on the panel */
@@ -867,7 +878,7 @@ h1, h2, h3 {
 }
 .boss::before { top: 6px; right: 6px; border-top: 2px solid; border-right: 2px solid; border-top-right-radius: 5px; }
 .boss::after { bottom: 6px; left: 6px; border-bottom: 2px solid; border-left: 2px solid; border-bottom-left-radius: 5px; }
-.boss.slain {
+.boss.status-slain {
   --boss-color: var(--uncommon);
   opacity: .9;
   animation: dropIn .4s ease;  /* stop the threat pulse once dead */
@@ -883,7 +894,7 @@ h1, h2, h3 {
 }
 .boss-name {
   font-family: "Cinzel", Georgia, serif;
-  font-size: 19px;
+  font-size: 1.1875rem;
   font-weight: 700;
   letter-spacing: 1px;
   color: var(--gold-bright);
@@ -896,7 +907,7 @@ h1, h2, h3 {
 }
 .boss-tier {
   font-family: "Cinzel", serif;
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 1.5px;
@@ -927,7 +938,7 @@ h1, h2, h3 {
   box-shadow: inset 0 -6px 10px -6px rgba(0,0,0,.7);
   transition: width .6s cubic-bezier(.2,.8,.2,1);
 }
-.boss.slain .boss-hp {
+.boss.status-slain .boss-hp {
   background:
     linear-gradient(180deg, rgba(255,255,255,.28), transparent 45%),
     linear-gradient(90deg, #1a7a2e, #3fcf5a);
@@ -947,14 +958,28 @@ h1, h2, h3 {
   align-items: center;
   justify-content: center;
   font-family: "Cinzel", serif;
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 1px;
   color: var(--gold-bright);
   text-shadow: 0 1px 2px rgba(0,0,0,.9), 0 0 6px rgba(0,0,0,.8);
   z-index: 1;
 }
-.boss-sub { margin-top: 10px; color: var(--muted); font-size: 13px; font-style: italic; }
+.boss.status-retreated, .boss.status-enraged {
+  --boss-color: var(--gold);
+  animation: dropIn .4s ease;  /* no threat pulse once the encounter is over */
+  background: linear-gradient(180deg, #1d1810, #15110b);
+  border-color: #4a3c26;
+}
+.boss.status-retreated .boss-hp, .boss.status-enraged .boss-hp {
+  background: linear-gradient(90deg, #6b5a3e, #a08a62);
+}
+.boss.status-retreated .boss-slain-line, .boss.status-enraged .boss-slain-line {
+  color: var(--gold-bright);
+  text-shadow: none;
+}
+.boss-slain-line .ui-icon { margin-right: 4px; }
+.boss-sub { margin-top: 10px; color: var(--muted); font-size: 0.8125rem; font-style: italic; }
 .boss-slain-line {
   margin-top: 12px;
   color: var(--uncommon);
@@ -983,7 +1008,7 @@ h1, h2, h3 {
 
 /* ---------- Real name (accountability) ---------- */
 .member-real {
-  font-size: 11px;
+  font-size: 0.6875rem;
   color: var(--gold);
   margin-top: 2px;
   white-space: nowrap;
@@ -991,7 +1016,7 @@ h1, h2, h3 {
   text-overflow: ellipsis;
 }
 .real-name { color: var(--gold); font-weight: 600; }
-.log-char { color: var(--muted); font-size: 12px; font-style: italic; }
+.log-char { color: var(--muted); font-size: 0.75rem; font-style: italic; }
 
 /* ---------- Accountability summary ---------- */
 .accountability-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
@@ -1008,8 +1033,8 @@ h1, h2, h3 {
 }
 .accountability-row.all-clear { border-left-color: var(--uncommon); opacity: .85; }
 .acc-name { font-weight: 600; }
-.acc-char { color: var(--muted); font-size: 12px; font-style: italic; font-weight: 400; }
-.acc-counts { display: flex; align-items: center; gap: 12px; font-size: 13px; }
+.acc-char { color: var(--muted); font-size: 0.75rem; font-style: italic; font-weight: 400; }
+.acc-counts { display: flex; align-items: center; gap: 12px; font-size: 0.8125rem; }
 .acc-open { color: var(--need); font-weight: 700; }
 .accountability-row.all-clear .acc-open { color: var(--muted); font-weight: 400; }
 .acc-done { color: var(--muted); }
@@ -1029,50 +1054,52 @@ h1, h2, h3 {
   .acc-bar { background: #3a2326; }
 }
 
-/* ---------- Remediation-step composer (author a fix live) ---------- */
-.remediation-composer {
+/* ---------- Tactic composer (author a fix live) ---------- */
+.tactic-composer {
   margin: 4px 0 16px;
   padding: 12px 14px;
   background: color-mix(in srgb, var(--gold) 6%, var(--bg-2));
   border: 1px solid color-mix(in srgb, var(--gold) 30%, var(--border));
   border-radius: 4px;
 }
-.rc-head {
+.tc-head {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
   width: 100%;
   padding: 0;
   background: none; border: none; cursor: pointer; text-align: left;
   font-family: "Cinzel", Georgia, serif;
-  font-size: 13px;
+  font-size: 0.8125rem;
   letter-spacing: .5px;
   color: var(--gold);
   margin-bottom: 8px;
 }
-.rc-head:hover { color: var(--gold-bright); }
-.rc-toggle-label { font-size: 11px; color: var(--muted); white-space: nowrap; }
-.rc-toggle-label::after { content: "Hide \25B4"; }
-.remediation-composer.collapsed { padding-top: 8px; padding-bottom: 8px; }
-.remediation-composer.collapsed .rc-head { margin-bottom: 0; }
-.remediation-composer.collapsed .rc-body { display: none; }
-.remediation-composer.collapsed .rc-toggle-label::after { content: "Propose a step \25BE"; color: var(--gold); }
-.rc-hint { font-size: 12px; margin: 8px 0 0; }
+.tc-head:hover { color: var(--gold-bright); }
+.tc-toggle-label { font-size: 0.6875rem; color: var(--muted); white-space: nowrap; }
+.tc-toggle-label::after { content: "Hide \25B4"; }
+.tactic-composer.collapsed { padding-top: 8px; padding-bottom: 8px; }
+.tactic-composer.collapsed .tc-head { margin-bottom: 0; }
+.tactic-composer.collapsed .tc-body { display: none; }
+.tactic-composer.collapsed .tc-toggle-label::after { content: "Propose a tactic \25BE"; color: var(--gold); }
+.tc-hint { font-size: 0.75rem; margin: 8px 0 0; }
 
-/* ---------- Remediation plan (steps proposed for a boss) ---------- */
-.rem-plan {
+/* ---------- Tactics (proposed for a boss) ---------- */
+.tactics {
   margin-top: 14px;
   padding-top: 12px;
   border-top: 1px solid var(--border);
 }
-.rem-plan-head {
-  font-size: 12px;
+.tactic-head {
+  margin: 0;
+  font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 1px;
   color: var(--muted);
   margin-bottom: 8px;
 }
-.rem-plan-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.rem-step {
+.tactic-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.tactic {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
   padding: 6px 8px;
@@ -1080,37 +1107,37 @@ h1, h2, h3 {
   border: 1px solid var(--border);
   border-left: 3px solid var(--muted);
   border-radius: 3px;
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
-.rem-step.owned { border-left-color: var(--uncommon); }
-.rem-step.unowned { opacity: .72; }
-.rem-name { flex: 1; }
-.rem-status { font-size: 12px; color: var(--muted); white-space: nowrap; }
-.rem-step.owned .rem-status { color: var(--gold); }
-
-/* remediation-plan step states: proposed (awaiting a drop) and on-the-table */
-.rem-step.proposed { border-left-color: var(--gold); }
-.rem-step.proposed .rem-status { color: var(--gold); font-style: italic; }
-.rem-step.ontable { border-left-color: var(--rare, #0070dd); }
-.rem-step.ontable .rem-status { color: var(--rare, #0070dd); font-weight: 600; }
-.rem-drop {
-  font-size: 11px;
-  padding: 4px 10px;
-  white-space: nowrap;
+.tactic.owned { border-left-color: var(--uncommon); }
+.tactic.unowned { opacity: .72; }
+.tactic-name { flex: 1; min-width: 0; }
+.tactic-rarity { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 0.75rem; max-width: 100%; }
+.rarity-select {
+  max-width: 100%;
+  font: inherit; font-size: 0.75rem; padding: 4px 6px; border-radius: 3px;
+  border: 1px solid var(--field-border); background: var(--bg-2); color: var(--text); min-height: 28px;
 }
-.rem-drop:disabled { opacity: .45; cursor: not-allowed; }
+.tactic-status { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
+.tactic-yours { font-size: 0.75rem; font-style: italic; }
+.tactic.owned .tactic-status { color: var(--gold); }
 
+/* tactic states: proposed (awaiting a drop) and on-the-table */
+.tactic.proposed { border-left-color: var(--gold); }
+.tactic.proposed .tactic-status { color: var(--gold); font-style: italic; }
+.tactic.ontable { border-left-color: var(--rare, #0070dd); }
+.tactic.ontable .tactic-status { color: var(--rare, #0070dd); font-weight: 600; }
 /* passed-over loot-log entries: recorded, but no owner and not a task */
 .loot-log-list li.passed-over { opacity: .62; }
 .loot-log-list li.passed-over .log-name { text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--muted) 70%, transparent); }
-.log-passed { color: var(--muted); font-style: italic; font-size: 12px; }
+.log-passed { color: var(--muted); font-style: italic; font-size: 0.75rem; }
 
 /* boss description — the "what/why" of the problem, as quest text on parchment */
 .boss-desc-text {
   margin-top: 10px;
   padding: 10px 14px;
   color: var(--ink);
-  font-size: 14px;
+  font-size: 0.875rem;
   line-height: 1.5;
   white-space: pre-wrap;
   background:
@@ -1119,4 +1146,191 @@ h1, h2, h3 {
   border: 1px solid #8a6a36;
   border-radius: 2px;
   box-shadow: 0 0 0 1px #000, inset 0 0 18px rgba(90,60,20,.35), 0 3px 8px rgba(0,0,0,.5);
+}
+
+
+/* =========================================================================
+   Session phases, achievements, threat voting and accessibility
+   ========================================================================= */
+
+/* ---------- Accessibility helpers ---------- */
+.sr-only {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0);
+  white-space: nowrap; border: 0;
+}
+.skip-link {
+  position: absolute; left: 12px; top: -60px; z-index: 100;
+  padding: 10px 14px; background: var(--panel-2); color: var(--wow-yellow);
+  border: 2px solid var(--wow-yellow); border-radius: 3px;
+}
+.skip-link:focus { top: 12px; }
+#main-content:focus { outline: none; }
+/* one clear focus ring everywhere: classic interface yellow, 11:1 or better */
+:focus-visible {
+  outline: 3px solid var(--wow-yellow);
+  outline-offset: 2px;
+}
+input[type="checkbox"] {
+  width: 20px; height: 20px; margin: 2px; flex-shrink: 0;
+  accent-color: var(--gold);
+}
+
+/* ---------- Forms ---------- */
+.field {
+  display: block;
+  font: inherit;
+  padding: 10px 12px;
+  border-radius: 3px;
+  border: 1px solid var(--field-border);
+  background: var(--bg-2);
+  color: var(--text);
+  width: min(420px, 100%);
+}
+textarea.field { width: 100%; resize: vertical; }
+.field-label { display: block; margin: 16px 0 6px; color: var(--muted); }
+.field-note { color: var(--gold); }
+.field-hint { font-size: 0.75rem; margin: 4px 0 10px; }
+.error-text { color: var(--need); min-height: 1.2em; margin: 10px 0 0; }
+.form-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 18px; }
+.stack-form { margin-top: 6px; }
+.stack-form .btn { margin-top: 12px; }
+.check-row { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.save-choice { margin: 18px 0 6px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 3px; background: var(--bg-2); }
+.save-choice .field-hint { margin: 6px 0 0 30px; }
+.join-row input { text-transform: uppercase; letter-spacing: 3px; max-width: 200px; }
+.btn-small { font-size: 0.75rem; padding: 5px 10px; min-height: 28px; }
+.empty-row { justify-content: center; text-align: center; padding: 10px; list-style: none; }
+.status-ok { color: var(--uncommon); }
+.status-bad { color: var(--need); }
+
+/* ---------- Top bar additions ---------- */
+.save-badge {
+  font-size: 0.75rem; padding: 4px 10px; border-radius: 3px;
+  border: 1px solid var(--field-border); color: var(--gold-bright); background: rgba(0,0,0,.3);
+}
+.acting-as, .keep-toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 0.8125rem; color: var(--muted); }
+.acting-as select {
+  font: inherit; color: var(--text); background: var(--bg-2);
+  border: 1px solid var(--field-border); border-radius: 3px; padding: 6px 8px; min-height: 32px;
+}
+
+/* ---------- Phase bar ---------- */
+.phase-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 18px; }
+.phase-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.phase-step { display: flex; align-items: center; gap: 8px; color: var(--muted); font-family: "Cinzel", Georgia, serif; font-size: 0.875rem; }
+.phase-num {
+  display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%;
+  border: 1px solid var(--field-border); font-size: 0.8125rem;
+}
+.phase-step.done { color: var(--gold); }
+.phase-step.done .phase-num { border-color: var(--gold); }
+.phase-step.current { color: var(--wow-yellow); font-weight: 700; }
+.phase-step.current .phase-num { background: var(--wow-yellow); color: #1a1206; border-color: var(--wow-yellow); }
+.phase-step.current .phase-name { text-decoration: underline; text-underline-offset: 4px; }
+.phase-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.phase-controls { display: flex; gap: 8px; }
+
+/* ---------- Timers (phase and enrage) ---------- */
+.timer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 0.875rem; }
+.timer .ui-icon { color: var(--gold); }
+.timer-left { font-variant-numeric: tabular-nums; color: var(--gold-bright); font-weight: 600; min-width: 7ch; }
+.timer.paused .timer-left { color: var(--muted); }
+.timer.expired .timer-left { color: var(--wow-yellow); }
+.timer-set { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+.timer-set input {
+  width: 4.5em; font: inherit; color: var(--text); background: var(--bg-2);
+  border: 1px solid var(--field-border); border-radius: 3px; padding: 4px 6px; min-height: 28px;
+}
+#enrage-timer:not(:empty) { margin-top: 12px; }
+
+/* ---------- Achievements board ---------- */
+.ach-board { list-style: none; margin: 18px 0 0; padding: 0; display: grid; gap: 10px; }
+.ach-card {
+  --ach-color: var(--rare);
+  display: flex; align-items: flex-start; gap: 14px;
+  padding: 12px 14px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--ach-color);
+  border-radius: 3px;
+}
+.ach-card.r-epic { --ach-color: var(--epic); }
+.ach-card.r-legendary { --ach-color: var(--legendary); box-shadow: 0 0 14px -6px var(--legendary); }
+.ach-card { color: var(--text); }
+.ach-badge { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 76px; color: var(--ach-color); }
+.ach-badge .ui-icon { width: 30px; height: 30px; }
+.ach-main { flex: 1; min-width: 0; }
+.ach-title { font-weight: 700; color: var(--gold-bright); overflow-wrap: anywhere; }
+.ach-detail { font-size: 0.8125rem; margin-top: 4px; white-space: pre-line; overflow-wrap: anywhere; }
+.ach-by { font-size: 0.75rem; color: var(--muted); margin-top: 6px; }
+.ach-actions { display: flex; align-items: center; gap: 6px; }
+.merge-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 16px; font-size: 0.875rem; color: var(--muted); }
+.merge-bar select {
+  font: inherit; max-width: 220px; color: var(--text); background: var(--bg-2);
+  border: 1px solid var(--field-border); border-radius: 3px; padding: 6px 8px; min-height: 32px;
+}
+
+/* rarity as a text label, so rarity never relies on colour alone */
+.rarity-tag {
+  display: inline-block; font-size: 0.6875rem; font-weight: 700; letter-spacing: .5px; text-transform: uppercase;
+  padding: 1px 6px; border-radius: 2px; border: 1px solid currentColor; background: rgba(0,0,0,.35); white-space: nowrap;
+}
+.tag-poor { color: var(--poor); } .tag-common { color: var(--common); } .tag-uncommon { color: var(--uncommon); }
+.tag-rare { color: var(--rare); } .tag-epic { color: var(--epic); } .tag-legendary { color: var(--legendary); }
+.rarity-from { font-size: 0.75rem; color: var(--muted); font-style: italic; }
+
+/* ---------- Threat ballot ---------- */
+.ballot-gate { margin-top: 14px; padding: 14px; border: 1px dashed var(--field-border); border-radius: 3px; background: var(--bg-2); }
+.ballot-gate p { margin: 0 0 10px; }
+.ballot-budget { font-weight: 700; color: var(--gold-bright); margin: 14px 0 8px; }
+.ballot-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.ballot-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
+  padding: 10px 12px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 3px;
+}
+.ballot-topic { flex: 1; min-width: 12ch; display: flex; flex-direction: column; gap: 2px; }
+.ballot-name { font-weight: 600; overflow-wrap: anywhere; }
+.ballot-desc { font-size: 0.8125rem; color: var(--text); opacity: .85; overflow-wrap: anywhere; white-space: pre-line; }
+.stepper { display: inline-flex; align-items: center; gap: 8px; }
+.btn-step { min-width: 36px; padding: 4px 0; font-size: 1.125rem; line-height: 1; }
+.stepper-value { min-width: 2ch; text-align: center; font-size: 1.125rem; font-weight: 700; color: var(--wow-yellow); }
+.ballot-total { font-weight: 700; color: var(--wow-yellow); }
+.ballot-hp { font-size: 0.8125rem; color: var(--muted); }
+
+/* ---------- Bags: rarity initial on each filled slot ---------- */
+.bag-slot { position: relative; }
+.bag-letter {
+  position: absolute; right: 1px; bottom: 0;
+  font-size: 0.625rem; font-weight: 700; line-height: 1; color: var(--slot-color);
+  text-shadow: 0 0 2px #000, 0 0 2px #000;
+}
+
+/* ---------- Character pickers: a check mark marks the selection too ---------- */
+.faction-option, .race-option, .class-option { position: relative; }
+.pick-check {
+  position: absolute; top: 6px; right: 8px;
+  font-size: 0.875rem; font-weight: 700; color: var(--pick-color);
+}
+
+/* ---------- Toasts: neutral and error kinds ---------- */
+.loot-toast.t-neutral { --toast-color: var(--gold); }
+.loot-toast.t-error { --toast-color: var(--need); }
+
+/* ---------- Dialogs ---------- */
+.modal-wide { width: min(760px, 100%); }
+.ledger-text { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.8125rem; margin-top: 12px; }
+.party-legend .host-crown, .party-legend .you-star { margin-left: 0; }
+
+/* ---------- Reduced motion: no toast slides, health-bar sweeps or pulses ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .btn:hover, .faction-option:hover, .race-option:hover, .class-option:hover, .reclaim-option:hover { transform: none; }
 }

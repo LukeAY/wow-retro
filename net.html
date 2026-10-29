@@ -3,289 +3,350 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Loot Council (Online) &mdash; WoW Retro</title>
+  <title>Loot Council &mdash; WoW Retro</title>
+  <link rel="icon" href="data:," />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="topbar">
+  <a class="skip-link" href="#main-content">Skip to content</a>
+
+  <header class="topbar">
     <div class="brand">
       <span class="brand-mark"><span data-icon="swords"></span></span>
       <h1>Loot Council</h1>
-      <span class="brand-sub">Online &mdash; per-laptop rolling</span>
+      <span id="brand-sub" class="brand-sub">Online &mdash; per-laptop rolling</span>
     </div>
-    <div class="topbar-actions" id="topbar-actions">
+    <div class="topbar-actions">
       <span id="conn-status" class="muted">connecting&hellip;</span>
       <span id="room-badge" class="muted"></span>
+      <span id="save-badge" class="save-badge hidden"></span>
+      <label id="acting-as-wrap" class="acting-as hidden">
+        <span>Acting as</span>
+        <select id="acting-as"></select>
+      </label>
+      <label id="keep-wrap" class="keep-toggle hidden">
+        <input type="checkbox" id="keep-session" />
+        <span>Keep after the tab closes</span>
+      </label>
       <button id="btn-mobs" class="btn btn-ghost hidden">Mob List</button>
       <button id="btn-config" class="btn btn-ghost hidden">Loot Table</button>
       <button id="btn-roster" class="btn btn-ghost hidden">Party</button>
-      <button id="btn-export" class="btn btn-ghost hidden" title="Copy the action items as markdown">Loot Ledger</button>
+      <button id="btn-export" class="btn btn-ghost hidden">Loot Ledger</button>
       <button id="btn-leave" class="btn btn-ghost btn-danger hidden">Leave Group</button>
     </div>
-  </div>
+  </header>
 
-  <!-- Lobby: create or join -->
-  <main id="lobby" class="layout">
-    <section class="card">
-      <div class="section-head"><h2>Form a Group</h2></div>
-      <p class="muted">The facilitator creates a room and shares the 4-letter code. Everyone else joins from their own laptop and claims a party slot.</p>
-      <div class="add-form" style="margin-top:16px;">
-        <button id="btn-create" class="btn btn-primary">Create a Room (I'm the Facilitator)</button>
-      </div>
-      <div class="add-form" style="margin-top:12px;">
-        <input id="join-code" type="text" maxlength="4" placeholder="ROOM CODE" style="text-transform:uppercase;letter-spacing:3px;" />
-        <button id="btn-join" class="btn">Join Group</button>
-      </div>
-      <p id="lobby-error" class="muted" style="color:var(--need);min-height:18px;"></p>
-    </section>
-  </main>
-
-  <!-- Character creation (shown after joining, before you have a character) -->
-  <main id="create-char" class="layout hidden">
-    <section class="card">
-      <div class="section-head"><h2>Create Your Character</h2></div>
-
-      <!-- Characters in this room nobody is playing right now (e.g. you dropped) -->
-      <div id="reclaim" class="reclaim hidden">
-        <h3 class="reclaim-title">Returning? Reclaim your character</h3>
-        <div id="reclaim-list" class="reclaim-list"></div>
-        <div class="reclaim-or muted">or create a new one</div>
-      </div>
-
-      <p class="muted">Pick a name and class. This becomes your own panel &mdash; no need to wait for the host.</p>
-
-      <label class="muted" style="display:block;margin:16px 0 6px;">Character name</label>
-      <input id="char-name" type="text" maxlength="24" placeholder="e.g. Shadowmend"
-        style="font:inherit;padding:10px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-2);color:var(--text);width:min(320px,100%);" />
-
-      <label class="muted" style="display:block;margin:18px 0 6px;">Your real name <span style="color:var(--gold);">(who's accountable for loot)</span></label>
-      <input id="char-realname" type="text" maxlength="40" placeholder="e.g. Alex Chen"
-        style="font:inherit;padding:10px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-2);color:var(--text);width:min(320px,100%);" />
-
-      <div class="pick-step"><span class="pick-num">1</span> Choose your faction</div>
-      <div id="faction-picker" class="faction-picker"></div>
-
-      <div class="pick-step"><span class="pick-num">2</span> Choose your race</div>
-      <div id="race-picker" class="race-picker"></div>
-
-      <div class="pick-step"><span class="pick-num">3</span> Choose your class</div>
-      <p class="muted" style="font-size:12px;margin:-4px 0 10px;">Only classes your race can be (WoW: Forever rules) are shown.</p>
-      <div id="class-picker" class="class-picker"></div>
-
-      <div style="margin-top:20px;">
-        <button id="btn-create-char" class="btn btn-primary">Create Character</button>
-      </div>
-      <p id="char-error" class="muted" style="color:var(--need);min-height:18px;"></p>
-    </section>
-  </main>
-
-  <!-- Scouting (shown once after creating a character): add topics to the shared mob list -->
-  <main id="scout" class="layout hidden">
-    <section class="card">
-      <div class="section-head"><h2>Scout the Dungeon</h2><span id="scout-count" class="muted"></span></div>
-      <p class="muted">Add the topics you want to discuss. Each one becomes a boss on the shared <b>Mob List</b>. The whole party sees the list live, so check it before adding a duplicate. When the facilitator pulls a boss, one is drawn at random: easier mobs tend to come first, then anything goes.</p>
-      <div class="mob-form" data-mob-form>
-        <input name="mob-name" type="text" maxlength="60" placeholder="Topic (boss name), e.g. Flaky CI pipeline" />
-        <textarea name="mob-desc" maxlength="500" rows="2" placeholder="What is it, and why does it matter? (optional)"></textarea>
-        <div class="mob-form-row">
-          <select name="mob-tier" title="How big is this topic?">
-            <option value="trash">Trash mob &mdash; minor nitpick (100 HP)</option>
-            <option value="elite" selected>Elite &mdash; worth discussing (220 HP)</option>
-            <option value="raid">Raid boss &mdash; big systemic issue (500 HP)</option>
-          </select>
-          <button class="btn btn-primary" data-add-mob>Add to Mob List</button>
+  <main id="main-content" tabindex="-1">
+    <!-- Lobby: create or join (online only) -->
+    <div id="lobby" class="layout hidden">
+      <section class="card" aria-labelledby="lobby-title">
+        <div class="section-head"><h2 id="lobby-title">Form a Group</h2></div>
+        <p class="muted">The facilitator creates a room and shares the 4-letter code. Everyone else joins from their own laptop and creates a character.</p>
+        <div class="save-choice">
+          <label class="check-row">
+            <input type="checkbox" id="create-persist" />
+            <span>Save this room so it survives a server restart</span>
+          </label>
+          <p id="create-persist-hint" class="muted field-hint"></p>
         </div>
-      </div>
-      <p id="scout-error" class="muted" style="color:var(--need);min-height:18px;"></p>
-      <ul id="scout-mob-list" class="editable-list mob-list"></ul>
-      <div style="margin-top:20px;">
-        <button id="btn-enter-dungeon" class="btn btn-primary">Enter the Dungeon</button>
-        <span class="muted" style="font-size:12px;margin-left:10px;">You can add more later from the Mob List.</span>
-      </div>
-    </section>
-  </main>
-
-  <!-- Game -->
-  <main id="game" class="layout hidden">
-    <section class="stage card">
-      <div class="stage-head">
-        <h2>Boss Encounter</h2>
-        <div class="stage-controls" id="facilitator-controls">
-          <button id="btn-pull-boss" class="btn btn-primary"><span data-icon="skull"></span> Pull a Boss</button>
-          <button id="btn-drop-random" class="btn btn-ghost hidden"><span data-icon="gem"></span> Drop from Backlog</button>
-          <button id="btn-drop-manual" class="btn btn-ghost hidden">Pick from Backlog</button>
-          <button id="btn-end-boss" class="btn btn-ghost btn-danger hidden">End Encounter</button>
+        <div class="add-form">
+          <button id="btn-create" class="btn btn-primary">Create a Room (I'm the Facilitator)</button>
         </div>
-      </div>
-
-      <!-- Active boss (topic) with health bar -->
-      <div id="boss" class="boss hidden"></div>
-
-      <!-- Inline remediation-step composer (facilitator-only, boss up). -->
-      <div id="remediation-composer" class="remediation-composer hidden">
-        <button class="rc-head" data-rc-toggle aria-expanded="true" aria-controls="rc-body" title="Show or hide the step composer">
-          <span><span data-icon="swords"></span> Call a strategy &mdash; anyone in the group can propose a remediation step</span>
-          <span class="rc-toggle-label"></span>
-        </button>
-        <div id="rc-body" class="rc-body">
-          <div class="add-form">
-            <input id="rc-name" type="text" placeholder="e.g. Add a retry around the flaky network call" />
-            <select id="rc-rarity" title="How much this step matters (priority)">
-              <option value="poor">Poor (trivial) &middot; 15 dmg</option>
-              <option value="common">Common (low) &middot; 30 dmg</option>
-              <option value="uncommon" selected>Uncommon (medium) &middot; 50 dmg</option>
-              <option value="rare">Rare (high) &middot; 80 dmg</option>
-              <option value="epic">Epic (critical) &middot; 120 dmg</option>
-              <option value="legendary">Legendary (top) &middot; 200 dmg</option>
-            </select>
-            <input id="rc-desc" type="text" placeholder="Detail (optional)" />
-            <button id="btn-drop-step" class="btn btn-primary">Propose Step</button>
-          </div>
-          <p class="rc-hint muted">Adds it to this boss's remediation plan. The facilitator drops proposed steps onto the table for Need / Greed / Pass when the room is ready.</p>
+        <div class="add-form join-row">
+          <label for="join-code" class="sr-only">Room code</label>
+          <input id="join-code" type="text" maxlength="4" placeholder="ROOM CODE" autocomplete="off" />
+          <button id="btn-join" class="btn">Join Group</button>
         </div>
-      </div>
+        <p id="lobby-error" class="error-text" role="alert"></p>
+      </section>
+    </div>
 
-      <div id="active-drop" class="active-drop empty">
-        <p class="empty-hint">The dungeon is quiet.</p>
-      </div>
+    <!-- Character creation -->
+    <div id="create-char" class="layout hidden">
+      <section class="card" aria-labelledby="char-title">
+        <div class="section-head"><h2 id="char-title">Create Your Character</h2></div>
 
-      <!-- My own vote controls (player-facing) -->
-      <div id="my-vote" class="resolve-bar hidden">
-        <div>
-          <div class="muted" style="margin-bottom:6px;">Your call on this drop:</div>
-          <div class="choice-row" style="max-width:320px;">
-            <button class="choice-btn" data-mychoice="need">Need</button>
-            <button class="choice-btn" data-mychoice="greed">Greed</button>
-            <button class="choice-btn" data-mychoice="pass">Pass</button>
+        <!-- Characters in this room nobody is playing right now (e.g. you dropped) -->
+        <div id="reclaim" class="reclaim hidden">
+          <h3 class="reclaim-title">Returning? Reclaim your character</h3>
+          <div id="reclaim-list" class="reclaim-list"></div>
+          <div class="reclaim-or muted">or create a new one</div>
+        </div>
+
+        <p id="char-intro" class="muted">Pick a name and class. This becomes your own panel &mdash; no need to wait for the host.</p>
+
+        <label for="char-name" class="field-label">Character name</label>
+        <input id="char-name" class="field" type="text" maxlength="24" placeholder="e.g. Shadowmend" autocomplete="off" />
+
+        <label for="char-realname" class="field-label">Real name <span class="field-note">(who's accountable for loot)</span></label>
+        <input id="char-realname" class="field" type="text" maxlength="40" placeholder="e.g. Alex Chen" autocomplete="off" />
+
+        <h3 class="pick-step" id="pick-faction"><span class="pick-num" aria-hidden="true">1</span> Choose your faction</h3>
+        <div id="faction-picker" class="faction-picker" role="group" aria-labelledby="pick-faction"></div>
+
+        <h3 class="pick-step" id="pick-race"><span class="pick-num" aria-hidden="true">2</span> Choose your race</h3>
+        <div id="race-picker" class="race-picker" role="group" aria-labelledby="pick-race"></div>
+
+        <h3 class="pick-step" id="pick-class"><span class="pick-num" aria-hidden="true">3</span> Choose your class</h3>
+        <p class="muted field-hint">Only classes your race can be (WoW: Forever rules) are shown.</p>
+        <div id="class-picker" class="class-picker" role="group" aria-labelledby="pick-class"></div>
+
+        <div class="form-actions">
+          <button id="btn-create-char" class="btn btn-primary">Create Character</button>
+          <button id="btn-cancel-char" class="btn btn-ghost hidden">Cancel</button>
+        </div>
+        <p id="char-error" class="error-text" role="alert"></p>
+      </section>
+    </div>
+
+    <!-- The session -->
+    <div id="game" class="layout hidden">
+      <!-- Phase bar: where the session is, and the host's controls for it -->
+      <nav class="phase-bar card" aria-label="Session phases">
+        <ol id="phase-steps" class="phase-steps"></ol>
+        <div class="phase-tools">
+          <div id="phase-timer" class="timer-slot"></div>
+          <div id="phase-controls" class="phase-controls hidden">
+            <button id="btn-phase-back" class="btn btn-ghost">Back</button>
+            <button id="btn-phase-next" class="btn btn-primary"></button>
           </div>
         </div>
-        <div id="my-vote-hint" class="muted"></div>
-      </div>
+      </nav>
 
-      <div id="resolve-bar" class="resolve-bar hidden">
-        <div id="vote-tally" class="vote-tally"></div>
-        <button id="btn-resolve" class="btn btn-primary hidden">Roll &amp; Resolve</button>
-      </div>
+      <!-- 1. Achievements -->
+      <section id="phase-achievements" class="card phase-panel hidden" aria-labelledby="ach-title">
+        <div class="section-head">
+          <h2 id="ach-title">Achievements</h2>
+          <span id="ach-count" class="muted"></span>
+        </div>
+        <p id="ach-intro" class="muted"></p>
+        <div id="ach-form" class="stack-form">
+          <label for="ach-title-input" class="field-label">Achievement</label>
+          <input id="ach-title-input" class="field" type="text" maxlength="60" placeholder="e.g. Shipped search to every customer" autocomplete="off" />
+          <label for="ach-detail-input" class="field-label">Detail <span class="field-note">(optional)</span></label>
+          <textarea id="ach-detail-input" class="field" maxlength="500" rows="2" placeholder="What happened, and who made it possible?"></textarea>
+          <div><button id="btn-post-ach" class="btn btn-primary">Post Achievement</button></div>
+        </div>
+        <div id="merge-bar" class="merge-bar hidden">
+          <label for="merge-source">Merge</label>
+          <select id="merge-source"></select>
+          <label for="merge-target">into</label>
+          <select id="merge-target"></select>
+          <button id="btn-merge" class="btn btn-ghost">Merge</button>
+        </div>
+        <ul id="ach-board" class="ach-board"></ul>
+      </section>
 
-      <div id="result-banner" class="result-banner hidden"></div>
-    </section>
+      <!-- 2. Scouting -->
+      <section id="phase-scouting" class="card phase-panel hidden" aria-labelledby="scout-title">
+        <div class="section-head">
+          <h2 id="scout-title">Scout the Dungeon</h2>
+          <span id="scout-count" class="muted"></span>
+        </div>
+        <p class="muted">Add the topics you want to discuss. Each one becomes a boss on the shared <b>Mob List</b>, which the whole party sees live, so check it before adding a duplicate. How tough each boss is gets decided next, by threat voting.</p>
+        <div class="mob-form" data-mob-form>
+          <label class="field-label" for="scout-mob-name">Topic (boss name)</label>
+          <input id="scout-mob-name" name="mob-name" class="field" type="text" maxlength="60" placeholder="e.g. Flaky CI pipeline" autocomplete="off" />
+          <label class="field-label" for="scout-mob-desc">Description <span class="field-note">(optional)</span></label>
+          <textarea id="scout-mob-desc" name="mob-desc" class="field" maxlength="500" rows="2" placeholder="What is it, and why does it matter?"></textarea>
+          <div><button class="btn btn-primary" data-add-mob>Add to Mob List</button></div>
+        </div>
+        <ul id="scout-mob-list" class="editable-list mob-list"></ul>
+      </section>
 
-    <section class="party">
-      <div class="section-head">
-        <h2>The Party</h2>
-        <span id="party-count" class="muted"></span>
-      </div>
-      <div id="party-grid" class="party-grid"></div>
-    </section>
+      <!-- 3. Threat voting -->
+      <section id="phase-voting" class="card phase-panel hidden" aria-labelledby="vote-title">
+        <div class="section-head">
+          <h2 id="vote-title">Threat Voting</h2>
+          <span id="vote-count" class="muted"></span>
+        </div>
+        <p id="vote-intro" class="muted"></p>
+        <div id="ballot-gate" class="ballot-gate hidden"></div>
+        <div id="ballot" class="ballot">
+          <p id="ballot-budget" class="ballot-budget" aria-live="polite"></p>
+          <ul id="ballot-list" class="ballot-list"></ul>
+          <div id="ballot-done" class="hidden"><button id="btn-hide-ballot" class="btn btn-ghost">Done, hide my ballot</button></div>
+        </div>
+        <div id="vote-controls" class="form-actions hidden">
+          <button id="btn-reveal" class="btn btn-primary">Reveal Threat</button>
+          <button id="btn-reopen" class="btn btn-ghost hidden">Reopen Voting</button>
+        </div>
+      </section>
 
-    <section id="accountability" class="accountability card hidden">
-      <div class="section-head">
-        <h2>Quest Log</h2>
-        <span id="accountability-sub" class="muted"></span>
-      </div>
-      <ul id="accountability-list" class="accountability-list"></ul>
-    </section>
+      <!-- 4. Boss encounters -->
+      <section id="phase-encounters" class="stage card phase-panel hidden" aria-labelledby="stage-title">
+        <div class="stage-head">
+          <h2 id="stage-title">Boss Encounter</h2>
+          <div class="stage-controls" id="facilitator-controls">
+            <button id="btn-pull-boss" class="btn btn-primary"><span data-icon="skull"></span> Pull a Boss</button>
+            <button id="btn-drop-random" class="btn btn-ghost hidden"><span data-icon="gem"></span> Drop from Backlog</button>
+            <button id="btn-drop-manual" class="btn btn-ghost hidden">Pick from Backlog</button>
+            <button id="btn-call-it" class="btn btn-ghost hidden">Call It</button>
+            <button id="btn-clear-stage" class="btn btn-ghost hidden">Clear Stage</button>
+          </div>
+        </div>
 
-    <section class="loot-log card">
-      <div class="section-head">
-        <h2>Loot Log</h2>
-        <span id="log-count" class="muted"></span>
-      </div>
-      <ul id="loot-log-list" class="loot-log-list"></ul>
-    </section>
+        <!-- Active boss (topic) with health bar -->
+        <div id="boss" class="boss hidden"></div>
+
+        <!-- Tactic composer: anyone can propose while a boss is up -->
+        <div id="tactic-composer" class="tactic-composer hidden">
+          <button class="tc-head" data-tc-toggle aria-expanded="true" aria-controls="tc-body">
+            <span><span data-icon="swords"></span> Call a strategy &mdash; anyone in the group can propose a tactic</span>
+            <span class="tc-toggle-label"></span>
+          </button>
+          <div id="tc-body" class="tc-body">
+            <div class="add-form">
+              <label for="tc-name" class="sr-only">Tactic</label>
+              <input id="tc-name" type="text" maxlength="120" placeholder="e.g. Add a retry around the flaky network call" autocomplete="off" />
+              <label for="tc-rarity" class="sr-only hidden" data-local-only>Priority (rarity)</label>
+              <select id="tc-rarity" class="hidden" data-local-only></select>
+              <label for="tc-desc" class="sr-only">Detail (optional)</label>
+              <input id="tc-desc" type="text" maxlength="500" placeholder="Detail (optional)" autocomplete="off" />
+              <button id="btn-propose-tactic" class="btn btn-primary">Propose Tactic</button>
+            </div>
+            <p id="tc-hint" class="tc-hint muted"></p>
+          </div>
+        </div>
+
+        <div id="active-drop" class="active-drop empty"><p class="empty-hint"></p></div>
+
+        <!-- My own vote (online) -->
+        <div id="my-vote" class="resolve-bar hidden">
+          <div>
+            <div class="muted" id="my-vote-label">Your call on this drop:</div>
+            <div class="choice-row" role="group" aria-labelledby="my-vote-label">
+              <button class="choice-btn" data-mychoice="need" aria-pressed="false">Need</button>
+              <button class="choice-btn" data-mychoice="greed" aria-pressed="false">Greed</button>
+              <button class="choice-btn" data-mychoice="pass" aria-pressed="false">Pass</button>
+            </div>
+          </div>
+          <div id="my-vote-hint" class="muted"></div>
+        </div>
+
+        <div id="resolve-bar" class="resolve-bar hidden">
+          <div id="vote-tally" class="vote-tally"></div>
+          <button id="btn-resolve" class="btn btn-primary hidden">Roll &amp; Resolve</button>
+        </div>
+
+        <div id="result-banner" class="result-banner hidden"></div>
+      </section>
+
+      <section class="party" aria-labelledby="party-title">
+        <div class="section-head">
+          <h2 id="party-title">The Party</h2>
+          <span class="party-legend muted"><span id="party-count"></span></span>
+        </div>
+        <div id="party-grid" class="party-grid"></div>
+      </section>
+
+      <section id="accountability" class="accountability card hidden" aria-labelledby="quest-title">
+        <div class="section-head">
+          <h2 id="quest-title">Quest Log</h2>
+          <span id="accountability-sub" class="muted"></span>
+        </div>
+        <ul id="accountability-list" class="accountability-list"></ul>
+      </section>
+
+      <section class="loot-log card" aria-labelledby="log-title">
+        <div class="section-head">
+          <h2 id="log-title">Loot Log</h2>
+          <span id="log-count" class="muted"></span>
+        </div>
+        <ul id="loot-log-list" class="loot-log-list"></ul>
+      </section>
+    </div>
   </main>
 
-  <!-- Loot table modal (facilitator) -->
+  <!-- Loot table (host) -->
   <div id="modal-config" class="modal hidden">
-    <div class="modal-box">
-      <div class="modal-head"><h3>Loot Table</h3><button class="modal-close" data-close>&times;</button></div>
+    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="config-title">
+      <div class="modal-head"><h3 id="config-title">Loot Table</h3><button class="modal-close" data-close aria-label="Close">&times;</button></div>
       <p class="muted">Task templates that can drop.</p>
       <ul id="loot-table-list" class="editable-list"></ul>
       <div class="add-form">
-        <input id="loot-name" type="text" placeholder="Item / task name" />
-        <select id="loot-rarity">
-          <option value="poor">Poor (trivial)</option>
-          <option value="common">Common (low)</option>
-          <option value="uncommon" selected>Uncommon (medium)</option>
-          <option value="rare">Rare (high)</option>
-          <option value="epic">Epic (critical)</option>
-          <option value="legendary">Legendary (top)</option>
-        </select>
-        <input id="loot-desc" type="text" placeholder="Description (optional)" />
+        <label for="loot-name" class="sr-only">Item or task name</label>
+        <input id="loot-name" type="text" maxlength="120" placeholder="Item / task name" autocomplete="off" />
+        <label for="loot-rarity" class="sr-only">Rarity</label>
+        <select id="loot-rarity"></select>
+        <label for="loot-desc" class="sr-only">Description (optional)</label>
+        <input id="loot-desc" type="text" maxlength="500" placeholder="Description (optional)" autocomplete="off" />
         <button id="btn-add-loot" class="btn btn-primary">Add</button>
       </div>
     </div>
   </div>
 
-  <!-- Mob list modal (everyone; facilitator can pull a specific mob) -->
+  <!-- Mob List (everyone; the host can pull a specific topic) -->
   <div id="modal-mobs" class="modal hidden">
-    <div class="modal-box">
-      <div class="modal-head"><h3>Mob List</h3><button class="modal-close" data-close>&times;</button></div>
-      <p class="muted">Topics waiting to be pulled. Pull a Boss draws one at random, favouring easier mobs early on.</p>
+    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="mobs-title">
+      <div class="modal-head"><h3 id="mobs-title">Mob List</h3><button class="modal-close" data-close aria-label="Close">&times;</button></div>
+      <p class="muted">Topics waiting to be pulled. Pull a Boss takes the highest threat first; topics with no threat are skipped.</p>
       <div class="mob-form" data-mob-form>
-        <input name="mob-name" type="text" maxlength="60" placeholder="Topic (boss name), e.g. Flaky CI pipeline" />
-        <textarea name="mob-desc" maxlength="500" rows="2" placeholder="What is it, and why does it matter? (optional)"></textarea>
-        <div class="mob-form-row">
-          <select name="mob-tier" title="How big is this topic?">
-            <option value="trash">Trash mob &mdash; minor nitpick (100 HP)</option>
-            <option value="elite" selected>Elite &mdash; worth discussing (220 HP)</option>
-            <option value="raid">Raid boss &mdash; big systemic issue (500 HP)</option>
-          </select>
-          <button class="btn btn-primary" data-add-mob>Add to Mob List</button>
-        </div>
+        <label class="field-label" for="modal-mob-name">Topic (boss name)</label>
+        <input id="modal-mob-name" name="mob-name" class="field" type="text" maxlength="60" placeholder="e.g. Flaky CI pipeline" autocomplete="off" />
+        <label class="field-label" for="modal-mob-desc">Description <span class="field-note">(optional)</span></label>
+        <textarea id="modal-mob-desc" name="mob-desc" class="field" maxlength="500" rows="2" placeholder="What is it, and why does it matter?"></textarea>
+        <div><button class="btn btn-primary" data-add-mob>Add to Mob List</button></div>
       </div>
       <ul id="modal-mob-list" class="editable-list mob-list"></ul>
     </div>
   </div>
 
-  <!-- Roster modal (facilitator) -->
+  <!-- Party roster (host) -->
   <div id="modal-roster" class="modal hidden">
-    <div class="modal-box">
-      <div class="modal-head"><h3>Party Roster</h3><button class="modal-close" data-close>&times;</button></div>
-      <p class="muted">Players create their own characters when they join. Use this only to add a proxy slot for someone who isn't online, or to kick / reassign.</p>
+    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="roster-title">
+      <div class="modal-head"><h3 id="roster-title">Party Roster</h3><button class="modal-close" data-close aria-label="Close">&times;</button></div>
+      <p id="roster-intro" class="muted">Players create their own characters when they join. Use this only to add a proxy slot for someone who isn't online, or to kick / reassign.</p>
       <ul id="roster-list" class="editable-list"></ul>
-      <div class="add-form">
-        <input id="member-name" type="text" placeholder="Member name" />
+      <div id="roster-add" class="add-form">
+        <label for="member-name" class="sr-only">Member name</label>
+        <input id="member-name" type="text" maxlength="24" placeholder="Member name" autocomplete="off" />
+        <label for="member-class" class="sr-only">Class</label>
         <select id="member-class"></select>
         <button id="btn-add-member" class="btn btn-primary">Add</button>
       </div>
     </div>
   </div>
 
-  <!-- Manual drop modal (facilitator) -->
+  <!-- Pick a backlog item to drop (host) -->
   <div id="modal-manual" class="modal hidden">
-    <div class="modal-box">
-      <div class="modal-head"><h3>Drop a Specific Item</h3><button class="modal-close" data-close>&times;</button></div>
+    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="manual-title">
+      <div class="modal-head"><h3 id="manual-title">Drop a Specific Item</h3><button class="modal-close" data-close aria-label="Close">&times;</button></div>
       <ul id="manual-drop-list" class="editable-list"></ul>
     </div>
   </div>
 
-  <!-- Pull boss modal (facilitator) -->
-  <div id="modal-boss" class="modal hidden">
-    <div class="modal-box">
-      <div class="modal-head"><h3>Pull a Boss</h3><button class="modal-close" data-close>&times;</button></div>
-      <p class="muted">The mob list is empty, so name a topic on the spot. Name the problem you're about to address, describe it so the room has context, and pick how big it is. Tougher bosses have more health, so expect to commit more remediation steps before they fall.</p>
-      <label class="muted" style="display:block;margin:16px 0 6px;">Problem (boss name)</label>
-      <input id="boss-name" type="text" maxlength="60" placeholder="e.g. Flaky CI pipeline"
-        style="font:inherit;padding:10px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-2);color:var(--text);width:100%;box-sizing:border-box;" />
-      <label class="muted" style="display:block;margin:18px 0 6px;">Description <span style="opacity:.7;">(optional &mdash; what is this problem, and why does it matter?)</span></label>
-      <textarea id="boss-desc" maxlength="500" rows="3" placeholder="e.g. CI fails ~1 in 5 runs on main, people re-run blindly, and we've started ignoring red builds."
-        style="font:inherit;padding:10px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-2);color:var(--text);width:100%;box-sizing:border-box;resize:vertical;"></textarea>
-      <label class="muted" style="display:block;margin:18px 0 6px;">Difficulty</label>
-      <select id="boss-tier" style="font:inherit;padding:10px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-2);color:var(--text);width:100%;">
-        <option value="trash">Trash mob &mdash; minor nitpick (100 HP)</option>
-        <option value="elite" selected>Elite &mdash; worth discussing (220 HP)</option>
-        <option value="raid">Raid boss &mdash; big systemic issue (500 HP)</option>
-      </select>
-      <div style="margin-top:20px;">
-        <button id="btn-confirm-boss" class="btn btn-primary">Pull Boss</button>
+  <!-- Loot Ledger preview -->
+  <div id="modal-ledger" class="modal hidden">
+    <div class="modal-box modal-wide" role="dialog" aria-modal="true" aria-labelledby="ledger-title">
+      <div class="modal-head"><h3 id="ledger-title">Loot Ledger</h3><button class="modal-close" data-close aria-label="Close">&times;</button></div>
+      <p class="muted">A markdown action plan to share after the retro: achievements first, then each boss with its status and actions.</p>
+      <label for="ledger-text" class="sr-only">Loot Ledger markdown</label>
+      <textarea id="ledger-text" class="field ledger-text" rows="16" readonly></textarea>
+      <div class="form-actions">
+        <button id="btn-copy-ledger" class="btn btn-primary">Copy</button>
+        <button id="btn-download-ledger" class="btn btn-ghost">Download .md</button>
+        <span id="ledger-status" class="muted" role="status"></span>
       </div>
     </div>
   </div>
 
-  <div id="toast-stack" class="toast-stack"></div>
+  <!-- Confirmation (replaces window.confirm so it's styled and keyboard-safe) -->
+  <div id="modal-confirm" class="modal hidden">
+    <div class="modal-box" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-text">
+      <div class="modal-head"><h3 id="confirm-title">Are you sure?</h3></div>
+      <p id="confirm-text"></p>
+      <div class="form-actions">
+        <button id="btn-confirm-yes" class="btn btn-primary">Confirm</button>
+        <button id="btn-confirm-no" class="btn btn-ghost" data-close>Cancel</button>
+      </div>
+    </div>
+  </div>
 
-  <script src="icons.js"></script>
-  <script src="net-client.js"></script>
+  <!-- Visual toasts are decorative; the announcer reads them out politely -->
+  <div id="toast-stack" class="toast-stack" aria-hidden="true"></div>
+  <div id="announcer" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+
+  <script type="module" src="net-client.js"></script>
 </body>
 </html>

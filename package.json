@@ -1,11 +1,12 @@
 {
   "name": "wow-retro-loot-council",
   "version": "1.0.0",
-  "description": "A World of Warcraft themed retro tool with Need/Greed/Pass loot rolling, local and networked (per-laptop) modes.",
+  "description": "A World of Warcraft themed retro tool: achievements, threat voting and boss encounters with Need/Greed/Pass loot rolling, in local and networked (per-laptop) modes.",
   "type": "module",
   "scripts": {
     "start": "node server/server.js",
-    "dev": "node --watch server/server.js"
+    "dev": "node --watch server/server.js",
+    "test": "node --test"
   },
   "dependencies": {
     "express": "^4.19.2",

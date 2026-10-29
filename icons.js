@@ -1,17 +1,21 @@
 /* =========================================================================
  * Loot Council — icon set
- * Low-fi 24x24 line-art SVGs drawn in currentColor, shared by both pages.
- * Load before app.js / net-client.js. Static markup can use
- * <span data-icon="name"></span>, which is filled in on load.
+ * Low-fi 24x24 line-art SVGs drawn in currentColor (an ES module).
+ * Static markup can use <span data-icon="name"></span>, which is filled in
+ * when this module loads. Icons are decorative (aria-hidden); whatever they
+ * mean is always given in text alongside them.
  * ========================================================================= */
 
-const ICON_PATHS = {
+export const ICON_PATHS = {
   swords:  `<path d="M3 3l2.5.5L16 14l-2 2L3.5 5.5zM21 3l-2.5.5L8 14l2 2 10.5-10.5z"/><path d="M12.5 17.5l5-5M15.5 15.5 19 19M6.5 12.5l5 5M8.5 15.5 5 19"/><circle cx="20" cy="20" r="1"/><circle cx="4" cy="20" r="1"/>`,
   skull:   `<path d="M5 11a7 7 0 0 1 14 0v3l-2 1.5V19H7v-3.5L5 14z"/><circle cx="9.3" cy="11.3" r="1.6" fill="currentColor"/><circle cx="14.7" cy="11.3" r="1.6" fill="currentColor"/><path d="M12 14l-1 1.8h2zM10 19v-2M14 19v-2"/>`,
   gem:     `<path d="M7 3h10l4 6-9 12L3 9z"/><path d="M3 9h18M12 21 8.5 9 12 3l3.5 6z"/>`,
   shield:  `<path d="M12 2 4 5v6c0 5 3.5 9 8 11 4.5-2 8-6 8-11V5z"/><path d="M12 6v12M7.5 10h9"/>`,
   person:  `<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.5 3.5-7 8-7s8 2.5 8 7"/>`,
   warning: `<path d="M12 3 2 20h20z"/><path d="M12 9v5M12 17h.01"/>`,
+  trophy:  `<path d="M7.5 3.5h9v5a4.5 4.5 0 0 1-9 0z"/><path d="M7.5 5H4.5c0 3 1.3 4.5 3.3 4.8M16.5 5h3c0 3-1.3 4.5-3.3 4.8M12 13v3.5M8.5 20.5h7M9.5 20.5l.5-4h4l.5 4"/>`,
+  hourglass: `<path d="M6.5 3h11M6.5 21h11M7.5 3c0 4.5 4.5 6 4.5 9s-4.5 4.5-4.5 9M16.5 3c0 4.5-4.5 6-4.5 9s4.5 4.5 4.5 9"/><path d="M9.5 18.5h5" />`,
+  flag:    `<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>`,
   crown:   `<path d="M3.5 8.5 8 12l4-6.5 4 6.5 4.5-3.5-1.8 9.5H5.3z" fill="currentColor" fill-opacity=".25"/><path d="M5.3 20.5h13.4"/><circle cx="3.5" cy="8.5" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="20.5" cy="8.5" r="1"/>`,
   lootbag: `<path d="M8.5 8.5C5 11 3.5 14.5 3.5 17c0 2.5 1.8 4 4.5 4h8c2.7 0 4.5-1.5 4.5-4 0-2.5-1.5-6-5-8.5z"/><path d="M8.5 8.5 7 4.5c1.8-.8 3.2.4 5 .4s3.2-1.2 5-.4l-1.5 4"/><path d="M8.5 8.5h7"/><circle cx="12" cy="15" r="2.3"/>`,
 };
@@ -49,41 +53,24 @@ const FACTION_ICON_PATHS = {
   Horde:    `<path d="M3.5 4 8 6.5l4-3.5 4 3.5L20.5 4 19 13c-.8 4.3-3.6 7-7 8.5-3.4-1.5-6.2-4.2-7-8.5z"/><path d="M8.5 11h7M9.3 11l1.2 4.5M14.7 11l-1.2 4.5"/>`,
 };
 
-function svgIcon(cls, paths) {
+export function svgIcon(cls, paths) {
   return `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
 }
 
 // Inline UI icon, sized to the surrounding text.
-function icon(name) {
+export function icon(name) {
   return ICON_PATHS[name] ? svgIcon("ui-icon", ICON_PATHS[name]) : "";
 }
 
-// A player's bags: `max` slots, filled left to right with their open tasks.
-// Each filled slot shows a loot bag in the task's rarity colour. Slots for
-// tasks this page hasn't shown before get a one-off "picked up" pop.
-const seenBagTasks = new Set();
-function bagSlots(tasks, max) {
-  const full = tasks.length >= max;
-  let html = "";
-  for (let i = 0; i < max; i++) {
-    const t = tasks[i];
-    if (!t) { html += `<span class="bag-slot"></span>`; continue; }
-    const fresh = !seenBagTasks.has(t.id);
-    seenBagTasks.add(t.id);
-    html += `<span class="bag-slot filled r-${t.rarity}${fresh ? " fresh" : ""}" title="${escapeHtml(t.name)}">${svgIcon("bag-icon", ICON_PATHS.lootbag)}</span>`;
-  }
-  return `<div class="bag-slots${full ? " full" : ""}" aria-label="Bags ${tasks.length} of ${max}${full ? ", full" : ""}">${html}</div>`;
-}
-
-function classIcon(cls) {
+export function classIcon(cls) {
   return CLASS_ICON_PATHS[cls] ? svgIcon("class-icon", CLASS_ICON_PATHS[cls]) : "";
 }
 
-function factionIcon(faction, cls = "ui-icon") {
+export function factionIcon(faction, cls = "ui-icon") {
   return FACTION_ICON_PATHS[faction] ? svgIcon(cls, FACTION_ICON_PATHS[faction]) : "";
 }
 
-function raceIcon(race) {
+export function raceIcon(race) {
   return RACE_ICON_PATHS[race] ? svgIcon("race-icon", RACE_ICON_PATHS[race]) : "";
 }
 
