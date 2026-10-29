@@ -18,6 +18,10 @@ export const ICON_PATHS = {
   flag:    `<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>`,
   crown:   `<path d="M3.5 8.5 8 12l4-6.5 4 6.5 4.5-3.5-1.8 9.5H5.3z" fill="currentColor" fill-opacity=".25"/><path d="M5.3 20.5h13.4"/><circle cx="3.5" cy="8.5" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="20.5" cy="8.5" r="1"/>`,
   lootbag: `<path d="M8.5 8.5C5 11 3.5 14.5 3.5 17c0 2.5 1.8 4 4.5 4h8c2.7 0 4.5-1.5 4.5-4 0-2.5-1.5-6-5-8.5z"/><path d="M8.5 8.5 7 4.5c1.8-.8 3.2.4 5 .4s3.2-1.2 5-.4l-1.5 4"/><path d="M8.5 8.5h7"/><circle cx="12" cy="15" r="2.3"/>`,
+  check:   `<path d="M4.5 12.5 9.5 17.5 19.5 6.5"/>`,
+  info:    `<circle cx="12" cy="12" r="9"/><path d="M12 11v6"/><circle cx="12" cy="7.5" r=".6" fill="currentColor"/>`,
+  menu:    `<path d="M4 6.5h16M4 12h16M4 17.5h16"/>`,
+  link:    `<path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/>`,
 };
 
 // Race portraits, used for party avatars and the race picker.

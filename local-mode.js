@@ -86,6 +86,7 @@ export function createLocalTransport({ onState, onError, onLedger }) {
   function send(msg) {
     if (msg.type === "ledger") return onLedger(buildLedger(room));
     if (msg.type === "createCharacter") {
+      if (room.ended) return onError("The raid has ended. Reopen it to add party members.");
       const check = validateCharacter(msg);
       if (check.error) return onError(check.error);
       actingAs = addMember(room, check.fields, uuid).id;

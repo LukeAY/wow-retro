@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { BOSS_TIERS } from "../shared/rules.js";
 import {
-  createRoom, migrateRoom, act, tick, viewFor, buildLedger, addMember, setHeld, partySize, roomBagSize,
+  createRoom, migrateRoom, act, tick, viewFor, buildLedger, buildSummary, addMember, setHeld, partySize, roomBagSize,
 } from "../shared/engine.js";
 
 // A deterministic context: sequential ids, scripted dice, a settable clock.
@@ -95,7 +96,7 @@ test("ballots are secret until reveal, and over-budget ballots are rejected", ()
   assert.equal(viewFor(s.room, s.as(s.m[2]), 0).mobList[0].threat, 3);
 });
 
-test("bosses are pulled highest threat first with sliding HP; zero threat is skipped", () => {
+test("bosses are pulled highest threat first, tiered by threat share; zero threat is skipped", () => {
   const s = setup();
   const [ci, reviews] = toVoting(s);
   s.run(s.as(s.m[1]), { type: "castThreat", ballot: { [ci]: 3 } });
@@ -103,14 +104,15 @@ test("bosses are pulled highest threat first with sliding HP; zero threat is ski
   s.run(s.host, { type: "setPhase", phase: "encounters" }); // reveals automatically
   s.run(s.host, { type: "pullBoss" });
   assert.equal(s.room.boss.name, "Flaky CI");
-  assert.equal(s.room.boss.hpMax, 500);
   assert.equal(s.room.boss.tier, "raid");
-  s.run(s.host, { type: "callIt" });
+  assert.deepEqual([s.room.boss.phase, s.room.boss.hp, s.room.boss.hpMax], ["prep", null, null]);
+  engage(s);
+  s.run(s.host, { type: "tacticalVictory" });
   s.run(s.host, { type: "pullBoss" });
   assert.equal(s.room.boss.name, "Slow reviews");
-  assert.equal(s.room.boss.hpMax, Math.round(60 + (2 / 4) * 440)); // 280, Elite
-  assert.equal(s.room.boss.tier, "elite");
-  s.run(s.host, { type: "callIt" });
+  assert.equal(s.room.boss.tier, "elite"); // 2 of the top 4 threat
+  engage(s);
+  s.run(s.host, { type: "tacticalVictory" });
   const none = act(s.room, s.host, { type: "pullBoss" }, s.ctx);
   assert.match(none.error, /No topics with threat/);
   assert.match(buildLedger(s.room), /## Not pulled\n- Standup — 0 threat/);
@@ -118,10 +120,17 @@ test("bosses are pulled highest threat first with sliding HP; zero threat is ski
 
 /* ---------------- Encounters ---------------- */
 
+// Pull the first topic (no threat, so a Normal boss), still in preparation.
 function toFight(s) {
   toVoting(s);
   s.run(s.host, { type: "setPhase", phase: "encounters" });
   s.run(s.host, { type: "pullBoss", mobId: s.room.mobList[0].id });
+}
+// Engage the live boss, first proposing Common filler tactics up to its minimum.
+function engage(s) {
+  const need = BOSS_TIERS[s.room.boss.tier].minTactics;
+  for (let i = s.room.boss.tactics.length; i < need; i++) s.run(s.host, { type: "proposeTactic", name: `Plan ${i}` });
+  s.run(s.host, { type: "engageBoss" });
 }
 
 test("tactics start at Common; rallies from the others raise them and un-rallying lowers them", () => {
@@ -166,6 +175,7 @@ test("rarity locks when a tactic is dropped", () => {
   s.run(s.as(s.m[0]), { type: "proposeTactic", name: "Fix it" });
   const t = s.room.boss.tactics[0];
   s.run(s.as(s.m[1]), { type: "rally", tacticId: t.id });
+  engage(s);
   s.run(s.host, { type: "dropTactic", tacticId: t.id });
   const late = act(s.room, s.as(s.m[2]), { type: "rally", tacticId: t.id }, s.ctx);
   assert.match(late.error, /already been dropped/);
@@ -190,6 +200,7 @@ test("the host's override sticks over rallies until handed back, and is logged",
   assert.equal(t.rarity, "rare");
   assert.equal(t.rarityFrom, null);
   s.run(s.host, { type: "setTacticRarity", tacticId: t.id, rarity: "epic" });
+  engage(s);
   s.run(s.host, { type: "dropTactic", tacticId: t.id });
   s.run(s.as(s.m[1]), { type: "setChoice", choice: "need" });
   s.run(s.host, { type: "resolve" });
@@ -222,23 +233,144 @@ test("local mode picks a starting rarity and has no tactic rallies", () => {
   assert.equal(room.tacticRallies, false);
 });
 
-test("calling it makes the boss retreat; the ledger shows status and open actions", () => {
-  const s = setup();
-  toFight(s);
-  s.run(s.as(s.m[1]), { type: "proposeTactic", name: "Fix it" });
-  s.run(s.host, { type: "dropTactic", tacticId: s.room.boss.tactics[0].id });
-  s.run(s.as(s.m[1]), { type: "setChoice", choice: "need" });
+// Pull a boss of the given tier: "raid" is the top-threat topic, "elite" has
+// half its threat, "normal" has none.
+function pullTier(s, tier) {
+  const [top, half] = toVoting(s);
+  s.run(s.as(s.m[1]), { type: "castThreat", ballot: { [top]: 3 } });
+  s.run(s.as(s.m[2]), { type: "castThreat", ballot: { [top]: 1, [half]: 2 } }); // half: 2 of 4
+  s.run(s.host, { type: "setPhase", phase: "encounters" });
+  const mobId = { raid: top, elite: half, normal: s.room.mobList[2].id }[tier];
+  s.run(s.host, { type: "pullBoss", mobId });
+  assert.equal(s.room.boss.tier, tier);
+}
+// Propose tactics of the given rarities (setting each one's rarity).
+function propose(s, rarities) {
+  return rarities.map((rarity, i) => {
+    s.run(s.host, { type: "proposeTactic", name: `${rarity} fix ${s.room.boss.tactics.length}` });
+    const t = s.room.boss.tactics.at(-1);
+    if (rarity !== "common") s.run(s.host, { type: "setTacticRarity", tacticId: t.id, rarity });
+    return t;
+  });
+}
+// Drop a tactic and have the winner Need it (or everyone pass); returns the damage.
+function play(s, tactic, winner) {
+  s.run(s.host, { type: "dropTactic", tacticId: tactic.id });
+  if (winner) s.run(s.as(winner), { type: "setChoice", choice: "need" });
   s.run(s.host, { type: "resolve" });
-  s.run(s.host, { type: "callIt" });
-  assert.equal(s.room.boss.status, "retreated");
-  assert.match(buildLedger(s.room), /— Retreated, 1 of 1 actions open/);
+  return s.room.lastResult.damage;
+}
+
+test("a boss is prepared first: no HP, no drops, no victory, until the host engages", () => {
+  const s = setup();
+  pullTier(s, "elite");
+  const boss = s.room.boss;
+  assert.equal(boss.phase, "prep");
+  const [t] = propose(s, ["uncommon"]);
+  assert.match(act(s.room, s.host, { type: "dropTactic", tacticId: t.id }, s.ctx).error, /Engage the boss/);
+  s.run(s.host, { type: "addLoot", name: "Backlog item", rarity: "rare" });
+  assert.match(act(s.room, s.host, { type: "drop" }, s.ctx).error, /Engage the boss/);
+  assert.match(act(s.room, s.host, { type: "tacticalVictory" }, s.ctx).error, /Engage the boss first/);
+  assert.match(act(s.room, s.host, { type: "timer", target: "enrage", action: "set", minutes: 5 }, s.ctx).error, /Engage the boss/);
+  assert.match(act(s.room, s.host, { type: "engageBoss" }, s.ctx).error, /at least 2 tactics/);
+  propose(s, ["uncommon"]);
+  assert.match(act(s.room, s.as(s.m[1]), { type: "engageBoss" }, s.ctx).error, /Only the host/);
+  // nobody can read HP from the state before Engage, the host included
+  for (const viewer of [s.host, s.as(s.m[1])]) {
+    const v = viewFor(s.room, viewer, 0).boss;
+    assert.deepEqual([v.hp, v.hpMax, v.phase], [null, null, "prep"]);
+  }
+  s.run(s.host, { type: "engageBoss" });
+  assert.deepEqual([boss.phase, boss.hpMax, boss.hp], ["fight", 65, 65]); // ceil(100 x 0.65)
+  assert.equal(viewFor(s.room, s.as(s.m[1]), 0).boss.hp, 65);
+  assert.match(act(s.room, s.host, { type: "engageBoss" }, s.ctx).error, /already engaged/);
+});
+
+test("an Elite with 3 Uncommon tactics has 98 HP: owning 2 of them kills it", () => {
+  const s = setup();
+  pullTier(s, "elite");
+  const [a, b] = propose(s, ["uncommon", "uncommon", "uncommon"]);
+  s.run(s.host, { type: "engageBoss" });
+  assert.equal(s.room.boss.hpMax, 98); // ceil(150 x 0.65)
+  assert.equal(play(s, a, s.m[1]), 50);
+  play(s, b, s.m[2]);
+  assert.equal(s.room.boss.status, "slain");
+});
+
+test("a Raid Boss with 5 Uncommon tactics has 200 HP: owning 4 kills it; a passed one does nothing", () => {
+  const s = setup();
+  pullTier(s, "raid");
+  const ts = propose(s, ["uncommon", "uncommon", "uncommon", "uncommon", "uncommon"]);
+  s.run(s.host, { type: "engageBoss" });
+  assert.equal(s.room.boss.hpMax, 200); // ceil(250 x 0.8)
+  assert.equal(play(s, ts[0], null), 0, "everyone passed");
+  assert.equal(s.room.boss.hp, 200);
+  for (let i = 1; i < 4; i++) play(s, ts[i], s.m[i]);
+  assert.equal(s.room.boss.hp, 50);
+  play(s, ts[4], s.m[4]);
+  assert.equal(s.room.boss.status, "slain");
+  assert.match(buildLedger(s.room), /— Slain, 4 of 4 actions open/);
+});
+
+test("a Normal boss with one Poor tactic has 20 HP and falls to it", () => {
+  const s = setup();
+  pullTier(s, "normal");
+  const [t] = propose(s, ["poor"]);
+  s.run(s.host, { type: "engageBoss" });
+  assert.equal(s.room.boss.hpMax, 20); // ceil(40 x 0.5)
+  play(s, t, s.m[1]);
+  assert.equal(s.room.boss.status, "slain");
+});
+
+test("once engaged, late tactics, backlog drops and rarity changes move HP with the plan", () => {
+  const s = setup();
+  pullTier(s, "raid");
+  const ts = propose(s, ["uncommon", "uncommon", "uncommon"]);
+  s.run(s.host, { type: "engageBoss" });
+  const boss = s.room.boss;
+  assert.deepEqual([boss.hp, boss.hpMax], [120, 120]); // ceil(150 x 0.8)
+  play(s, ts[0], s.m[1]);                               // 70 / 120
+  const [late] = propose(s, ["common"]);                // + ceil(45 x 0.8) = 36
+  assert.deepEqual([boss.hp, boss.hpMax], [106, 156]);
+  s.run(s.host, { type: "setTacticRarity", tacticId: late.id, rarity: "legendary" }); // +ceil(45 x 0.8)
+  assert.deepEqual([boss.hp, boss.hpMax], [142, 192]);
+  s.run(s.host, { type: "setTacticRarity", tacticId: late.id, rarity: "common" });    // and back
+  assert.deepEqual([boss.hp, boss.hpMax], [106, 156]);
+  s.run(s.host, { type: "addLoot", name: "Backlog item", rarity: "rare" });
+  s.run(s.host, { type: "drop", lootId: s.room.lootTable.at(-1).id });              // + ceil(60 x 0.8) = 48
+  assert.deepEqual([boss.hp, boss.hpMax], [154, 204]);
+  s.run(s.host, { type: "resolve" });
+  s.run(s.host, { type: "drop", lootId: ts[1].id });   // one of this boss's own tactics: no change
+  assert.deepEqual([boss.hp, boss.hpMax], [154, 204]);
+});
+
+test("a Tactical Victory ends an engaged boss at any HP; the ledger shows what was left", () => {
+  const s = setup();
+  pullTier(s, "raid");
+  const ts = propose(s, ["uncommon", "uncommon", "uncommon"]);
+  s.run(s.host, { type: "engageBoss" });
+  play(s, ts[0], s.m[1]);
+  assert.match(act(s.room, s.as(s.m[1]), { type: "tacticalVictory" }, s.ctx).error, /Only the host/);
+  s.run(s.host, { type: "dropTactic", tacticId: ts[1].id });
+  assert.match(act(s.room, s.host, { type: "tacticalVictory" }, s.ctx).error, /Resolve the current drop/);
+  s.run(s.host, { type: "resolve" });
+  s.run(s.host, { type: "tacticalVictory", note: "Good enough for now" });
+  assert.equal(s.room.boss.status, "tactical");
+  assert.equal(s.room.boss.hp, 70);
+  assert.match(act(s.room, s.host, { type: "tacticalVictory" }, s.ctx).error, /no boss engaged/);
+  const ledger = buildLedger(s.room);
+  assert.match(ledger, /— Tactical Victory \(70 of 120 HP left\), 1 of 1 actions open/);
+  assert.match(ledger, /> Note: Good enough for now/);
+  s.run(s.host, { type: "clearStage" });
+  assert.equal(s.room.bossLog[0].status, "tactical", "archived with its outcome");
 });
 
 test("an enrage that runs out mid-vote waits for the drop to resolve", () => {
   const s = setup();
   toFight(s);
-  s.run(s.host, { type: "timer", target: "enrage", action: "set", minutes: 1 });
   s.run(s.as(s.m[1]), { type: "proposeTactic", name: "Fix it" });
+  engage(s);
+  s.run(s.host, { type: "timer", target: "enrage", action: "set", minutes: 1 });
   s.run(s.host, { type: "dropTactic", tacticId: s.room.boss.tactics[0].id });
   assert.equal(tick(s.room, 61_000), false, "doesn't enrage during a live vote");
   s.ctx.now = 61_000;
@@ -249,6 +381,7 @@ test("an enrage that runs out mid-vote waits for the drop to resolve", () => {
 test("a paused enrage timer doesn't run out", () => {
   const s = setup();
   toFight(s);
+  engage(s);
   s.run(s.host, { type: "timer", target: "enrage", action: "set", minutes: 1 });
   s.ctx.now = 30_000;
   s.run(s.host, { type: "timer", target: "enrage", action: "pause" });
@@ -258,6 +391,22 @@ test("a paused enrage timer doesn't run out", () => {
   assert.equal(tick(s.room, 149_000), false);
   assert.equal(tick(s.room, 150_000), true);
   assert.equal(s.room.boss.status, "enraged");
+});
+
+/* ---------------- Characters ---------------- */
+
+test("players edit their own character, under the same rules as creating one", () => {
+  const s = setup(["Ana", "Ben"]);
+  s.run(s.as(s.m[1]), { type: "editCharacter", name: "Benedict", realName: "Ben Q", race: "Tauren", cls: "Druid" });
+  assert.deepEqual(
+    (({ name, realName, race, cls }) => ({ name, realName, race, cls }))(s.room.members[1]),
+    { name: "Benedict", realName: "Ben Q", race: "Tauren", cls: "Druid" });
+  assert.equal(s.room.members[0].name, "Ana", "only your own");
+  assert.match(act(s.room, s.as(s.m[1]), { type: "editCharacter", name: "B", realName: "B", race: "Night Elf", cls: "Mage" }, s.ctx).error, /cannot be a Mage/);
+  assert.match(act(s.room, s.as(s.m[1]), { type: "editCharacter", name: "", realName: "B", race: "Human", cls: "Warrior" }, s.ctx).error, /character name/);
+  assert.match(act(s.room, { memberId: null, facilitator: false }, { type: "editCharacter", name: "X", realName: "X", race: "Human", cls: "Warrior" }, s.ctx).error, /Create a character/);
+  s.run(s.host, { type: "endRaid" });
+  assert.match(act(s.room, s.as(s.m[1]), { type: "editCharacter", name: "Late", realName: "B", race: "Human", cls: "Warrior" }, s.ctx).error, /raid has ended/);
 });
 
 /* ---------------- Bags ---------------- */
@@ -295,9 +444,10 @@ function winDrops(s, winner, count) {
 test("when bags shrink, nothing is taken away but you can't win more until under the limit", () => {
   const s = setup(["Ana", "Ben"]); // bag size 5
   const [topic] = toVoting(s);
-  s.run(s.as(s.m[1]), { type: "castThreat", ballot: { [topic]: 3 } }); // 500 HP: survives the test
+  s.run(s.as(s.m[1]), { type: "castThreat", ballot: { [topic]: 3 } });
   s.run(s.host, { type: "setPhase", phase: "encounters" });
   s.run(s.host, { type: "pullBoss", mobId: s.room.mobList[0].id });
+  engage(s); // each won drop deals more than it adds, so the boss outlasts the test
   winDrops(s, s.m[1], 5);
   for (const name of ["Cy", "Di"]) addMember(s.room, { name, realName: `${name} R`, race: "Human", cls: "Warrior" }, s.ctx.uuid);
   assert.equal(roomBagSize(s.room), 3);           // party of 4
@@ -333,6 +483,119 @@ test("rooms saved before bag sizing treat slots without a real name as proxies",
   assert.equal(roomBagSize(room), 5);
 });
 
+/* ---------------- End Raid and the Raid Summary ---------------- */
+
+// A small finished session: Ben owns a Rare and an Uncommon, Cy a Common.
+function playedRaid() {
+  const s = setup(["Ana", "Ben", "Cy", "Di"]);
+  s.room.members[3].realName = "aaron"; // sorts first, case-insensitively
+  s.run(s.as(s.m[1]), { type: "postAchievement", title: "Shipped it" });
+  s.run(s.as(s.m[2]), { type: "rally", achievementId: s.room.achievements[0].id });
+  const [topic] = toVoting(s);
+  s.run(s.as(s.m[1]), { type: "castThreat", ballot: { [topic]: 3 } });
+  s.run(s.host, { type: "setPhase", phase: "encounters" });
+  s.run(s.host, { type: "pullBoss" });
+  const plan = ["rare", "uncommon", "common"].map((rarity) => {
+    s.run(s.host, { type: "proposeTactic", name: `${rarity} fix` });
+    const t = s.room.boss.tactics.at(-1);
+    s.run(s.host, { type: "setTacticRarity", tacticId: t.id, rarity });
+    return t;
+  });
+  s.run(s.host, { type: "engageBoss" });
+  s.run(s.host, { type: "proposeTactic", name: "later idea" }); // never dropped: keeps the boss standing
+  for (const [t, member] of [[plan[0], s.m[1]], [plan[1], s.m[1]], [plan[2], s.m[2]]]) {
+    s.run(s.host, { type: "dropTactic", tacticId: t.id });
+    s.run(s.as(member), { type: "setChoice", choice: "need" });
+    s.run(s.host, { type: "resolve" });
+  }
+  s.run(s.host, { type: "tacticalVictory", note: "Covered by the CI rewrite" });
+  return s;
+}
+
+test("only the host can end the raid, and not while a vote is open", () => {
+  const s = setup();
+  toFight(s);
+  assert.match(act(s.room, s.as(s.m[1]), { type: "endRaid" }, s.ctx).error, /Only the host/);
+  s.run(s.host, { type: "proposeTactic", name: "Fix it" });
+  engage(s);
+  s.run(s.host, { type: "dropTactic", tacticId: s.room.boss.tactics[0].id });
+  assert.match(act(s.room, s.host, { type: "endRaid" }, s.ctx).error, /Resolve the current drop/);
+  s.run(s.host, { type: "resolve" });
+  s.run(s.host, { type: "endRaid" });
+  assert.equal(s.room.boss.status, "abandoned", "a boss still being fought is abandoned");
+  assert.match(buildLedger(s.room), /— Abandoned \(\d+ of \d+ HP left\)/);
+});
+
+test("a boss still in preparation when the raid ends is abandoned with no HP", () => {
+  const s = setup();
+  toFight(s);
+  s.run(s.host, { type: "endRaid" });
+  assert.equal(s.room.boss.status, "abandoned");
+  assert.match(buildLedger(s.room), /— Normal \(HP never set, 0 threat\) — Abandoned, no actions/);
+  assert.equal(viewFor(s.room, s.host, 0).summary.encounters[0].hpLeft, null);
+});
+
+test("after End Raid the room is read-only until the host reopens it", () => {
+  const s = playedRaid();
+  s.run(s.host, { type: "endRaid" });
+  const attempts = [
+    [s.as(s.m[1]), { type: "postAchievement", title: "Late" }],
+    [s.as(s.m[1]), { type: "rally", achievementId: s.room.achievements[0].id }],
+    [s.as(s.m[1]), { type: "addMob", name: "Late topic" }],
+    [s.host, { type: "pullBoss" }],
+    [s.host, { type: "setPhase", phase: "voting" }],
+    [s.host, { type: "drop" }],
+    [s.host, { type: "addMember", name: "Late" }],
+    [s.as(s.m[1]), { type: "toggleTask", taskId: s.room.log[0].id }],
+    [s.host, { type: "timer", target: "phase", action: "set", minutes: 5 }],
+    [s.host, { type: "resetSession" }],
+  ];
+  for (const [actor, msg] of attempts) {
+    assert.match(act(s.room, actor, msg, s.ctx).error, /raid has ended/, msg.type);
+  }
+  assert.match(act(s.room, s.as(s.m[1]), { type: "reopenRaid" }, s.ctx).error, /Only the host/);
+  s.run(s.host, { type: "reopenRaid" });
+  s.run(s.as(s.m[1]), { type: "toggleTask", taskId: s.room.log[0].id });
+});
+
+test("the summary has team totals only, and character sheets sorted by real name", () => {
+  const s = playedRaid();
+  assert.equal(viewFor(s.room, s.host, 0).summary, null, "no summary before the end");
+  s.run(s.host, { type: "endRaid" });
+  const sum = viewFor(s.room, s.as(s.m[3]), 0).summary;
+  assert.deepEqual(sum.totals, {
+    bossesSlain: 0, tacticalVictories: 1, tacticsOwned: 3, achievements: 1,
+    gold: 185000 + 42000 + 2500, // Rare + Uncommon + Common vendor values
+  });
+  const [boss] = sum.encounters;
+  assert.equal(boss.statusLabel, "Tactical Victory");
+  assert.equal(boss.note, "Covered by the CI rewrite");
+  assert.deepEqual(boss.tactics.map((t) => [t.name, t.rarity, t.owner?.realName ?? null]),
+    [["rare fix", "rare", "Ben R"], ["uncommon fix", "uncommon", "Ben R"], ["common fix", "common", "Cy R"], ["later idea", "common", null]]);
+  assert.deepEqual(sum.encounters.slice(1).map((e) => [e.name, e.statusLabel]), [["Slow reviews", "Not pulled"], ["Standup", "Not pulled"]]);
+  assert.deepEqual(sum.achievements[0].rallies.map((r) => r.realName), ["Cy R"], "achievement ralliers are shown");
+  assert.equal("rallies" in boss.tactics[0], false, "tactic ralliers stay private");
+
+  assert.deepEqual(sum.characters.map((c) => c.realName), ["aaron", "Ana R", "Ben R", "Cy R"]);
+  const ben = sum.characters.find((c) => c.realName === "Ben R");
+  assert.deepEqual(ben.owned.map((t) => t.name), ["rare fix", "uncommon fix"]);
+  assert.deepEqual(ben.posted.map((a) => a.title), ["Shipped it"]);
+  assert.deepEqual(sum.characters.find((c) => c.realName === "Cy R").rallied.map((a) => a.title), ["Shipped it"]);
+  // nothing per player that could rank people
+  for (const c of sum.characters) {
+    assert.deepEqual(Object.keys(c).sort(), ["cls", "faction", "id", "name", "owned", "posted", "race", "rallied", "realName"]);
+  }
+  assert.match(buildLedger(s.room), /> Note: Covered by the CI rewrite/);
+});
+
+test("the full summary keeps tactic rallies for the Loot Ledger", () => {
+  const s = setup();
+  toFight(s);
+  s.run(s.as(s.m[0]), { type: "proposeTactic", name: "Fix it" });
+  s.run(s.as(s.m[1]), { type: "rally", tacticId: s.room.boss.tactics[0].id });
+  assert.equal(buildSummary(s.room).encounters[0].tactics[0].rallies[0].realName, "Ben R");
+});
+
 /* ---------------- Migration ---------------- */
 
 test("rooms saved by older versions are migrated", () => {
@@ -348,10 +611,37 @@ test("rooms saved by older versions are migrated", () => {
   assert.equal("tier" in room.mobList[0], false);
   assert.equal(room.boss.tier, "normal");
   assert.equal(room.boss.status, "active");
-  assert.equal(room.boss.hpMax, 100);
+  assert.equal(room.boss.hpMax, 100); // 1 of 4 drops was 100 HP
   assert.equal(room.boss.hp, 50);
+  assert.equal(room.boss.phase, "fight", "bosses from before preparation were already fighting");
   assert.equal(room.bossLog[0].status, "slain");
   assert.doesNotThrow(() => buildLedger(room));
+});
+
+test("bosses saved before preparation load mid-fight with their HP untouched and stay fightable", () => {
+  let n = 0;
+  const ctx = { uuid: () => `n${++n}`, rollD: () => 50, rand: () => 0, now: 0 };
+  const room = migrateRoom({
+    code: "OLD4", phase: "encounters", persist: true, hpScale: 2,
+    members: [{ id: "a", name: "Ana", realName: "Ana R", race: "Human", cls: "Warrior" }],
+    threat: { ballots: {}, revealed: true, totals: { t1: 6, t2: 3 } },
+    boss: { id: "b1", name: "Top", threat: 6, hpMax: 250, hp: 125, tier: "raid", status: "active",
+      tactics: [{ id: "x", name: "Old plan", rarity: "rare", rarityFrom: null, dropped: false, rallies: [], base: "common", override: "rare", proposedById: null }] },
+    bossLog: [
+      { id: "bx", name: "Called", threat: 3, hpMax: 145, hp: 73, tier: "elite", status: "retreated", note: "done", tactics: [] },
+      { id: "by", name: "Cut short", threat: 3, hpMax: 145, hp: 36, tier: "elite", status: "retreated", endedMidFight: true, tactics: [] },
+    ],
+    lootTable: [{ id: "x", name: "Old plan", rarity: "rare" }], log: [],
+  });
+  assert.deepEqual([room.boss.phase, room.boss.hpMax, room.boss.hp], ["fight", 250, 125]);
+  assert.equal("hpScale" in room, false);
+  assert.deepEqual(room.bossLog.map((b) => b.status), ["tactical", "abandoned"]);
+  assert.ok(act(room, { memberId: "a", facilitator: true }, { type: "dropTactic", tacticId: "x" }, ctx).ok, "still fightable");
+  act(room, { memberId: "a", facilitator: false }, { type: "setChoice", choice: "need" }, ctx);
+  act(room, { memberId: "a", facilitator: true }, { type: "resolve" }, ctx);
+  assert.equal(room.boss.hp, 65);
+  const again = migrateRoom(JSON.parse(JSON.stringify(room)));
+  assert.deepEqual([again.boss.phase, again.boss.hp], ["fight", 65]);
 });
 
 test("remediation steps migrate to tactics, keeping their picked rarity", () => {

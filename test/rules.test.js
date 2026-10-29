@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  resolveRolls, bossHp, tierForHp, HP_BASE, HP_RANGE,
+  resolveRolls, BOSS_TIERS, tierForThreat, tierLabel, hpFromTactics, hpForDamage,
   achievementRarity, RALLY_EPIC, RALLY_LEGENDARY, tacticRarity,
   TACTIC_RALLY_UNCOMMON, TACTIC_RALLY_RARE, TACTIC_RALLY_EPIC, TACTIC_RALLY_LEGENDARY,
-  slotsUsed, bagsFull, bagSize, TEAM_ACTION_BUDGET, MIN_BAG_SLOTS, tacticDamage, TACTIC_DAMAGE,
+  slotsUsed, bagsFull, bagSize, TEAM_ACTION_BUDGET, MIN_BAG_SLOTS, tacticDamage, TACTIC_DAMAGE, TACTIC_BASE_DAMAGE, RARITY_BONUS,
   validateThreatBallot, tallyThreat, nextBossByThreat, THREAT_PER_PLAYER,
   isValidCombo,
 } from "../shared/rules.js";
@@ -68,34 +68,53 @@ test("repeated ties keep re-rolling until broken", () => {
 
 /* ---------------- HP and damage ---------------- */
 
-test("boss HP slides with threat: top topic is base + range", () => {
-  assert.equal(bossHp(9, 9), HP_BASE + HP_RANGE);
-  assert.equal(bossHp(9, 9), 500);
+test("a boss's tier comes from its share of the top threat", () => {
+  assert.equal(tierForThreat(6, 6), "raid");
+  assert.equal(tierForThreat(5, 6), "raid");     // 83%
+  assert.equal(tierForThreat(4, 6), "elite");    // 67%
+  assert.equal(tierForThreat(2, 6), "elite");    // 33%
+  assert.equal(tierForThreat(1, 6), "normal");   // 17%
+  assert.equal(tierForThreat(0, 6), "normal");
+  assert.equal(tierForThreat(3, 0), "normal");   // nobody voted
+  assert.deepEqual(["normal", "elite", "raid"].map(tierLabel), ["Normal", "Elite", "Raid Boss"]);
 });
 
-test("boss HP rounds the proportional share", () => {
-  assert.equal(bossHp(1, 3), Math.round(60 + 440 / 3)); // 207
-  assert.equal(bossHp(2, 3), Math.round(60 + 880 / 3)); // 353
+test("tiers: HP percentage of the plan and the tactics needed to engage", () => {
+  assert.deepEqual(Object.values(BOSS_TIERS).map((t) => [t.hpPct, t.minTactics]), [[0.5, 1], [0.65, 2], [0.8, 3]]);
 });
 
-test("no threat (or nobody voted) gives base HP", () => {
-  assert.equal(bossHp(0, 5), HP_BASE);
-  assert.equal(bossHp(0, 0), HP_BASE);
-  assert.equal(bossHp(3, 0), HP_BASE);
+test("HP is the tier's share of the plan's total damage, rounded up", () => {
+  assert.equal(hpFromTactics(["uncommon", "uncommon", "uncommon"], "elite"), 98);  // ceil(150 x 0.65)
+  assert.equal(hpFromTactics(Array(5).fill("uncommon"), "raid"), 200);            // ceil(250 x 0.8)
+  assert.equal(hpFromTactics(["poor"], "normal"), 20);
+  assert.equal(hpFromTactics([], "raid"), 0);
 });
 
-test("tier bands come from HP", () => {
-  assert.equal(tierForHp(60).label, "Normal");
-  assert.equal(tierForHp(199).label, "Normal");
-  assert.equal(tierForHp(200).label, "Elite");
-  assert.equal(tierForHp(379).label, "Elite");
-  assert.equal(tierForHp(380).label, "Raid Boss");
-  assert.equal(tierForHp(500).label, "Raid Boss");
+test("HP added (or taken) by a change to the plan once the fight is on", () => {
+  assert.equal(hpForDamage(45, "raid"), 36);    // ceil(45 x 0.8)
+  assert.equal(hpForDamage(-45, "raid"), -36);  // a rarity drop undoes a rise exactly
+  assert.equal(hpForDamage(0, "elite"), 0);
 });
 
-test("only owned tactics deal damage, scaled by rarity", () => {
-  assert.equal(tacticDamage("rare", true), TACTIC_DAMAGE.rare);
-  assert.equal(tacticDamage("legendary", false), 0);
+test("only owned tactics deal damage: a flat base plus a small rarity bonus", () => {
+  assert.equal(TACTIC_BASE_DAMAGE, 40);
+  assert.deepEqual(TACTIC_DAMAGE, { poor: 40, common: 45, uncommon: 50, rare: 60, epic: 70, legendary: 90 });
+  for (const r of Object.keys(RARITY_BONUS)) assert.equal(tacticDamage(r, true), TACTIC_BASE_DAMAGE + RARITY_BONUS[r]);
+  assert.equal(tacticDamage("legendary", false), 0, "passed over: no damage");
+});
+
+// Owning the whole plan always kills the boss, and inflating rarity before
+// engaging doesn't help: HP rises with the plan's damage.
+test("owning a share of the plan above the tier's percentage kills the boss", () => {
+  for (const tier of Object.keys(BOSS_TIERS)) {
+    for (const rarity of Object.keys(RARITY_BONUS)) {
+      const plan = Array(5).fill(rarity);
+      const hp = hpFromTactics(plan, tier);
+      const owned = Math.ceil(hp / tacticDamage(rarity, true));
+      assert.ok(owned <= plan.length, `${tier}/${rarity}`);
+      assert.equal(owned, Math.ceil(5 * BOSS_TIERS[tier].hpPct), `${tier}/${rarity}: same share at any rarity`);
+    }
+  }
 });
 
 /* ---------------- Achievement rarity ---------------- */

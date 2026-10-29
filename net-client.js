@@ -8,7 +8,7 @@
 
 import {
   RARITIES, RARITY, TACTIC_DAMAGE, rarityRank, tierLabel, BOSS_STATUS,
-  RALLY_EPIC, RALLY_LEGENDARY, TEAM_ACTION_BUDGET, MIN_BAG_SLOTS, TACTIC_RALLY_UNCOMMON, TACTIC_RALLY_LEGENDARY, RACE_CLASSES, FACTION, CLASS_NAMES, bossHp, tierForHp,
+  RALLY_EPIC, RALLY_LEGENDARY, TEAM_ACTION_BUDGET, MIN_BAG_SLOTS, TACTIC_RALLY_UNCOMMON, TACTIC_RALLY_LEGENDARY, RACE_CLASSES, FACTION, CLASS_NAMES, BOSS_TIERS, tierForThreat,
 } from "./shared/rules.js";
 import { PHASES, PHASE_LABEL } from "./shared/engine.js";
 import { icon, svgIcon, ICON_PATHS, raceIcon, classIcon, factionIcon } from "./icons.js";
@@ -43,8 +43,8 @@ function createWsTransport() {
     const proto = location.protocol === "https:" ? "wss" : "ws";
     ws = new WebSocket(`${proto}://${location.host}`);
     ws.addEventListener("open", () => {
-      setStatus("connected", true);
-      const room = new URLSearchParams(location.search).get("room");
+      setStatus("connected");
+      const room = roomFromUrl();
       if (room) transport.send({ type: "join", room });
       else showScreen("lobby");
     });
@@ -61,7 +61,7 @@ function createWsTransport() {
       }
     });
     ws.addEventListener("close", () => {
-      setStatus("disconnected — retrying…", false);
+      setStatus("disconnected");
       setTimeout(connect, 1500);
     });
     ws.addEventListener("error", () => ws.close());
@@ -74,15 +74,28 @@ function createWsTransport() {
 
 const send = (msg) => transport.send(msg);
 
-function setStatus(text, ok) {
+// The dot is decorative; the words carry the state. The status region only
+// changes when the state does, so reconnect retries aren't re-announced.
+const CONN_TEXT = { connecting: "Connecting…", connected: "Connected", disconnected: "Disconnected" };
+function setStatus(state) {
   const el = $("#conn-status");
-  el.textContent = text;
-  el.classList.toggle("status-ok", ok);
-  el.classList.toggle("status-bad", !ok);
+  if (el.dataset.state === state) return;
+  el.dataset.state = state;
+  $("#conn-text").textContent = CONN_TEXT[state];
 }
 
+// A shared invite link is net.html?room=ABCD. Codes are A–Z / 0–9, four long.
+const cleanCode = (value) => String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4);
+const roomFromUrl = () => cleanCode(new URLSearchParams(location.search).get("room"));
+const inviteLink = (code) => `${location.origin}${location.pathname}?room=${code}`;
+
 function onError(message) {
+  // A refused action can leave a control showing the change (a ticked box,
+  // a picked option) while the markup string is unchanged: redraw it all.
+  htmlCache = new WeakMap();
+  if (view && !$("#game").classList.contains("hidden")) withFocusKept(render);
   if (!view && !LOCAL) showScreen("lobby"); // e.g. a link to a room that no longer exists
+  $("#lobby-joining").classList.toggle("hidden", true);
   if (!$("#lobby").classList.contains("hidden")) { $("#lobby-error").textContent = message; return; }
   if (!$("#create-char").classList.contains("hidden")) { $("#char-error").textContent = message; return; }
   toast({ kind: "error", iconName: "warning", heading: "You can't do that", title: message });
@@ -90,10 +103,15 @@ function onError(message) {
 
 /* ---------------- Screens ---------------- */
 
-let addingMember = false; // local mode: the host is adding another party member
+let addingMember = false;  // local mode: the host is adding another party member
+let editingChar = false;   // Edit my character: the character screen, prefilled
 
 function showScreen(name) {
   for (const s of ["lobby", "create-char", "game"]) $(`#${s}`).classList.toggle("hidden", s !== name);
+  // the lobby hero carries the name (as the page h1), so the top bar drops it
+  $("#brand").classList.toggle("hidden", name === "lobby");
+  for (const id of ["#room-chip", "#you-wrap"]) $(id).classList.toggle("hidden", name === "lobby");
+  if (name === "lobby") { $("#bar-tools").classList.toggle("hidden", true); $("#phase-tracker").classList.toggle("hidden", true); setYouPanel(false); }
 }
 
 function onState(msg) {
@@ -102,13 +120,15 @@ function onState(msg) {
   view = msg;
 
   if (!LOCAL && firstRoom) {
-    $("#room-badge").textContent = `Room ${msg.room}`;
     const url = new URL(location.href);
     url.searchParams.set("room", msg.room);
     history.replaceState({}, "", url);
   }
 
-  if (!view.you.memberId || addingMember) {
+  // After End Raid everyone sees the Raid Summary, with or without a character.
+  if (view.ended) addingMember = editingChar = false;
+  if (editingChar && !view.you.memberId) editingChar = false;
+  if ((!view.you.memberId || addingMember || editingChar) && !view.ended) {
     showScreen("create-char");
     renderTopbar(false);
     renderCreateChar();
@@ -121,6 +141,25 @@ function onState(msg) {
 }
 
 /* ---------------- Rendering ---------------- */
+
+// Every state update re-renders, but most sections haven't changed. Writing
+// identical markup still rebuilds the DOM and relayouts the page (slow in
+// Safari) and throws away what's in a field, such as a half-typed timer
+// length. So a write is skipped when the markup is the same as last time.
+let htmlCache = new WeakMap();
+function setHtml(el, html) {
+  if (htmlCache.get(el) === html) return;
+  htmlCache.set(el, html);
+  el.innerHTML = html;
+}
+// Same for plain text and class names: rewriting identical values still
+// counts as a change and invalidates style and layout.
+function setText(el, text) {
+  if (el.textContent !== text) el.textContent = text;
+}
+function setClass(el, cls) {
+  if (el.className !== cls) el.className = cls;
+}
 
 const isHost = () => !!view && view.you.role === "facilitator";
 
@@ -144,6 +183,13 @@ function withFocusKept(fn) {
 }
 
 function render() {
+  $("#game").classList.toggle("raid-over", !!view.ended);
+  $("#raid-summary").classList.toggle("hidden", !view.ended);
+  if (view.ended) {
+    renderSummary();
+    refreshOpenModals();
+    return;
+  }
   renderPhaseBar();
   for (const p of PHASES) $(`#phase-${p}`).classList.toggle("hidden", view.phase !== p);
   if (view.phase === "achievements") renderAchievements();
@@ -157,36 +203,123 @@ function render() {
   updateTimers();
 }
 
+// The member a viewer plays (in local mode, whoever the screen acts as).
+const me = () => (view && view.members.find((m) => m.id === view.you.memberId)) || null;
+
+function setAvatar(el, m) {
+  el.style.setProperty("--member-color", m ? (CLASS_COLORS[m.cls] || "#c8aa6e") : "var(--gold)");
+  setHtml(el, m ? (raceIcon(m.race) || escapeHtml(m.name.slice(0, 2).toUpperCase())) : icon("person"));
+}
+
 function renderTopbar(inGame) {
-  $("#brand-sub").innerHTML = LOCAL ? "Local &mdash; single screen" : "Online &mdash; per-laptop rolling";
   const host = isHost();
-  $("#btn-mobs").classList.toggle("hidden", !inGame || view.phase === "achievements");
-  $("#btn-config").classList.toggle("hidden", !inGame || !host);
-  $("#btn-roster").classList.toggle("hidden", !inGame || !host);
-  $("#btn-export").classList.toggle("hidden", !inGame);
-  $("#btn-leave").classList.remove("hidden");
-  $("#btn-leave").textContent = LOCAL ? "Disband Group" : "Leave Group";
+  const ended = !!view.ended;
+  const m = me();
 
-  const badge = $("#save-badge");
-  if (LOCAL) {
-    badge.classList.add("hidden");
-    $("#keep-wrap").classList.remove("hidden");
-    $("#keep-session").checked = !!view.persist;
-  } else {
-    badge.classList.remove("hidden");
-    badge.textContent = view.persist ? "Saved room" : "Not saved";
-    badge.title = view.persist
-      ? "This room is saved and survives a server restart."
-      : "This room isn't saved: it's lost if the server restarts.";
+  // room chip: the code and (for the host) the invite link; local mode has neither
+  $("#room-chip").classList.toggle("local", LOCAL);
+  setText($("#room-code"), LOCAL ? "Single screen" : view.room);
+  $("#btn-copy-invite").classList.toggle("hidden", LOCAL || !host);
+
+  // status stack: plain text, the dot is extra
+  $("#conn-status").classList.toggle("hidden", LOCAL);
+  $("#save-status").classList.toggle("hidden", false);
+  setText($("#save-text"), LOCAL ? (view.persist ? "Kept in this browser" : "This tab only") : (view.persist ? "Saved" : "Not saved"));
+  setText($("#save-tip"), LOCAL
+    ? (view.persist ? "This session is kept in this browser until you disband the group." : "This session is lost when this tab closes. Tick Keep after the tab closes in the menu to keep it.")
+    : (view.persist ? "This room is saved on the server and survives a restart." : "This room isn't saved: it's gone if the server restarts, or a day after everyone leaves."));
+
+  // everyday tools, shown by phase and role as before
+  $("#bar-tools").classList.toggle("hidden", !inGame);
+  const tools = {
+    mobs: inGame && !ended && view.phase !== "achievements",
+    roster: inGame && host && !(ended && LOCAL), // online the host can still kick or hand over after the end
+    export: inGame,
+    config: inGame && !ended && host,
+  };
+  $("#btn-mobs").classList.toggle("hidden", !tools.mobs);
+  $("#btn-roster").classList.toggle("hidden", !tools.roster);
+  $("#btn-export").classList.toggle("hidden", !tools.export);
+  for (const b of $$("#you-panel [data-tool]")) {
+    if (b.dataset.tool in tools) b.closest("li").classList.toggle("hidden", !tools[b.dataset.tool]);
   }
 
-  if (LOCAL) {
-    const wrap = $("#acting-as-wrap");
-    wrap.classList.toggle("hidden", view.members.length === 0);
-    $("#acting-as").innerHTML = view.members.map((m) =>
-      `<option value="${m.id}"${m.id === view.you.memberId ? " selected" : ""}>${escapeHtml(m.name)}</option>`).join("")
-      + `<option value="__add">+ Add a party member…</option>`;
+  // you: avatar, name and "Real name · Race Class · Facilitator"
+  const sub = m ? [m.realName, `${m.race} ${m.cls}`, host && !LOCAL ? "Facilitator" : ""].filter(Boolean).join(" · ")
+    : (host && !LOCAL ? "Facilitator" : "");
+  for (const [av, name, line] of [["#you-avatar", "#you-name", "#you-sub"], ["#menu-avatar", "#menu-name", "#menu-sub"]]) {
+    setAvatar($(av), m);
+    setText($(name), m ? m.name : "No character");
+    setText($(line), sub);
+    $(line).classList.toggle("hidden", !sub);
   }
+  setAvatar($("#bar-avatar"), m);
+  $("#bar-avatar").classList.toggle("hidden", !m);
+  setText($("#menu-status"), [LOCAL ? "Single screen" : `Room ${view.room}`, LOCAL ? "" : $("#conn-text").textContent, $("#save-text").textContent].filter(Boolean).join(" · "));
+  $("#btn-edit-char").closest("li").classList.toggle("hidden", !m || ended || editingChar || addingMember);
+  setText($("#btn-leave"), LOCAL ? "Disband group" : "Leave group");
+
+  // local mode: switch who the screen acts as, and whether the session is kept
+  $("#keep-wrap").classList.toggle("hidden", !LOCAL);
+  $("#keep-session").checked = !!view.persist;
+  const acting = LOCAL && view.members.length > 0 && !ended;
+  $("#acting-as-wrap").classList.toggle("hidden", !acting);
+  if (acting) {
+    setHtml($("#acting-as"), view.members.map((x) => {
+      const on = x.id === view.you.memberId;
+      return `<li><button class="you-item acting-item" data-act-as="${x.id}" aria-pressed="${on}">${on ? icon("check") : `<span class="check-gap" aria-hidden="true"></span>`} ${escapeHtml(x.name)}</button></li>`;
+    }).join("") + `<li><button class="you-item acting-item" data-act-as="__add"><span class="check-gap" aria-hidden="true"></span> + Add a party member</button></li>`);
+  }
+  renderTracker(inGame);
+}
+
+/* ----- disclosure panels (the character menu and the save-status tip) ----- */
+// Disclosure pattern, not role="menu": a button with aria-expanded controls a
+// plain list. Escape closes and returns focus; clicking outside closes.
+
+function setYouPanel(open, { returnFocus = false } = {}) {
+  const panel = $("#you-panel");
+  const wasOpen = !panel.classList.contains("hidden");
+  panel.classList.toggle("hidden", !open);
+  for (const id of ["#btn-char", "#btn-menu"]) $(id).setAttribute("aria-expanded", String(open));
+  if (!open && wasOpen && returnFocus) visibleTrigger().focus();
+}
+// whichever of the two triggers this screen width shows
+const visibleTrigger = () => ($("#btn-menu").offsetParent ? $("#btn-menu") : $("#btn-char"));
+
+function setSaveTip(open) {
+  $("#save-tip").classList.toggle("hidden", !open);
+  $("#btn-save-info").setAttribute("aria-expanded", String(open));
+}
+
+/* ----- phase tracker ----- */
+
+const TRACK = [...PHASES, "summary"];
+const TRACK_LABEL = { achievements: "Achievements", scouting: "Scout", voting: "Threat", encounters: "Bosses", summary: "Summary" };
+const PHASE_HINT = {
+  achievements: "Post what went well and rally behind each other's wins",
+  scouting: "Add the topics you want to discuss",
+  voting: "Spread your threat across the topics, in secret",
+  encounters: "Propose tactics and claim them to defeat each boss",
+  summary: "The raid is over: review and export",
+};
+
+function renderTracker(inGame) {
+  $("#phase-tracker").classList.toggle("hidden", !inGame);
+  if (!inGame) return;
+  const current = view.ended ? "summary" : view.phase;
+  const at = TRACK.indexOf(current);
+  setHtml($("#phase-steps"), TRACK.map((p, i) => {
+    const state = i < at ? "done" : i === at ? "current" : "todo";
+    const chevron = i < TRACK.length - 1 ? `<span class="phase-chev" aria-hidden="true">&#8250;</span>` : "";
+    return `<li class="phase-step ${state}"${state === "current" ? ' aria-current="step"' : ""}>
+        <span class="phase-pill">${state === "done" ? icon("check") : ""}<span class="phase-name">${TRACK_LABEL[p]}</span>${state === "done" ? `<span class="sr-only">, done</span>` : state === "current" ? `<span class="sr-only">, current phase</span>` : ""}</span>${chevron}
+      </li>`;
+  }).join(""));
+  setText($("#phase-now"), TRACK_LABEL[current]);
+  setText($("#phase-count"), `Phase ${at + 1} of ${TRACK.length}`);
+  setHtml($("#phase-segments"), TRACK.map((p, i) => `<span class="seg ${i < at ? "done" : i === at ? "current" : ""}"></span>`).join(""));
+  setText($("#phase-hint"), PHASE_HINT[current]);
 }
 
 /* ----- phase bar and timers ----- */
@@ -197,20 +330,16 @@ const NEXT_LABEL = {
   voting: "Start Boss Encounters",
 };
 
+// The facilitator row under the tracker: the phase timer (everyone sees a
+// running one) and the host's Back / Next / End Raid.
 function renderPhaseBar() {
   const at = PHASES.indexOf(view.phase);
-  $("#phase-steps").innerHTML = PHASES.map((p, i) => {
-    const state = i < at ? "done" : i === at ? "current" : "todo";
-    const word = state === "done" ? "done" : state === "current" ? "current phase" : "up next";
-    return `<li class="phase-step ${state}"${state === "current" ? ' aria-current="step"' : ""}>
-      <span class="phase-num" aria-hidden="true">${state === "done" ? "&#10003;" : i + 1}</span>
-      <span class="phase-name">${PHASE_LABEL[p]}</span><span class="sr-only"> (${word})</span></li>`;
-  }).join("");
   const host = isHost();
+  $("#host-bar").classList.toggle("hidden", !host && !view.phaseTimer);
   $("#phase-controls").classList.toggle("hidden", !host);
   $("#btn-phase-back").disabled = at === 0;
   $("#btn-phase-next").classList.toggle("hidden", at === PHASES.length - 1);
-  $("#btn-phase-next").textContent = NEXT_LABEL[view.phase] || "";
+  setText($("#btn-phase-next"), NEXT_LABEL[view.phase] || "");
   renderTimer($("#phase-timer"), "phase", view.phaseTimer, host, "Phase timer");
 }
 
@@ -228,7 +357,7 @@ function renderTimer(slot, target, t, canControl, label) {
   } else {
     delete timers[target];
   }
-  if (!t && !canControl) { slot.innerHTML = ""; return; }
+  if (!t && !canControl) { setHtml(slot, ""); return; }
   const controls = !canControl ? "" : t
     ? `<button class="btn btn-ghost btn-small" data-timer="${target}" data-timer-action="${t.paused ? "resume" : "pause"}">${t.paused ? "Resume" : "Pause"}</button>
        <button class="btn btn-ghost btn-small" data-timer="${target}" data-timer-action="extend" data-minutes="1">+1 min</button>
@@ -238,10 +367,10 @@ function renderTimer(slot, target, t, canControl, label) {
          <input type="number" min="1" max="120" value="${target === "enrage" ? 10 : 5}" id="timer-min-${target}" aria-label="${label} length in minutes" />
          <span aria-hidden="true">min</span></label>
        <button class="btn btn-ghost btn-small" data-timer="${target}" data-timer-action="set">Start</button>`;
-  slot.innerHTML = `<div class="timer${t && t.paused ? " paused" : ""}">
+  setHtml(slot, `<div class="timer${t && t.paused ? " paused" : ""}">
       ${t ? `${icon("hourglass")}<span class="timer-left" role="timer" data-timer-left="${target}"></span>` : ""}
       ${controls}
-    </div>`;
+    </div>`);
 }
 
 function formatClock(ms) {
@@ -255,7 +384,7 @@ function updateTimers() {
     const label = target === "enrage" ? "until enrage" : "left";
     const text = t.paused ? `Paused, ${formatClock(left)} ${label}` : left > 0 ? `${formatClock(left)} ${label}` : (target === "enrage" ? "Enraging…" : "Time's up");
     for (const el of $$(`[data-timer-left="${target}"]`)) {
-      el.textContent = text;
+      setText(el, text);
       el.parentElement.classList.toggle("expired", left === 0 && !t.paused);
     }
     if (left === 0 && !t.paused && !t.upAnnounced && target === "phase") {
@@ -271,16 +400,16 @@ setInterval(() => { if (view) updateTimers(); }, 1000);
 function renderAchievements() {
   const open = view.phase === "achievements";
   const hasChar = !!view.you.memberId;
-  $("#ach-intro").textContent = `Post what went well. If someone already posted yours, rally behind theirs instead: rallies raise an achievement from Rare to Epic (${Math.round(RALLY_EPIC * 100)}% of the rest of the party) to Legendary (${Math.round(RALLY_LEGENDARY * 100)}%).`
-    + (LOCAL ? " Use Acting as at the top to post or rally as each person." : "");
+  setText($("#ach-intro"), `Post what went well. If someone already posted yours, rally behind theirs instead: rallies raise an achievement from Rare to Epic (${Math.round(RALLY_EPIC * 100)}% of the rest of the party) to Legendary (${Math.round(RALLY_LEGENDARY * 100)}%).`
+    + (LOCAL ? " Use Acting as at the top to post or rally as each person." : ""));
   $("#ach-form").classList.toggle("hidden", !open || !hasChar);
-  $("#ach-count").textContent = plural(view.achievements.length, "achievement", "achievements");
+  setText($("#ach-count"), plural(view.achievements.length, "achievement", "achievements"));
 
   const sorted = view.achievements
     .map((a, i) => ({ a, i }))
     .sort((x, y) => rarityRank(y.a.rarity) - rarityRank(x.a.rarity) || x.i - y.i)
     .map((x) => x.a);
-  $("#ach-board").innerHTML = sorted.length ? sorted.map((a) => {
+  setHtml($("#ach-board"), sorted.length ? sorted.map((a) => {
     const r = RARITY[a.rarity];
     const posters = a.posters.map((p) => escapeHtml(p.realName || p.name)).join(", ");
     const rally = open && hasChar && !a.mine
@@ -297,15 +426,15 @@ function renderAchievements() {
         </div>
         <div class="ach-actions">${rally}${remove}</div>
       </li>`;
-  }).join("") : `<li class="empty-row muted">No achievements yet. Post the first one above.</li>`;
+  }).join("") : `<li class="empty-row muted">No achievements yet. Post the first one above.</li>`);
 
   const merge = $("#merge-bar");
   merge.classList.toggle("hidden", !isHost() || view.achievements.length < 2);
   if (isHost() && view.achievements.length >= 2) {
     const opts = view.achievements.map((a) => `<option value="${a.id}">${escapeHtml(a.title)}</option>`).join("");
     const keep = [$("#merge-source").value, $("#merge-target").value];
-    $("#merge-source").innerHTML = opts;
-    $("#merge-target").innerHTML = opts;
+    setHtml($("#merge-source"), opts);
+    setHtml($("#merge-target"), opts);
     if (view.achievements.some((a) => a.id === keep[0])) $("#merge-source").value = keep[0];
     if (view.achievements.some((a) => a.id === keep[1])) $("#merge-target").value = keep[1];
     else $("#merge-target").selectedIndex = 1;
@@ -317,8 +446,8 @@ function renderAchievements() {
 function renderMobList(sel, inDialog) {
   const host = isHost();
   const canPull = inDialog && host && view.phase === "encounters" && !(view.boss && view.boss.status === "active");
-  $("#scout-count").textContent = plural(view.mobList.length, "topic", "topics") + " scouted";
-  $(sel).innerHTML = view.mobList.length ? view.mobList.map((m) => {
+  setText($("#scout-count"), plural(view.mobList.length, "topic", "topics") + " scouted");
+  setHtml($(sel), view.mobList.length ? view.mobList.map((m) => {
     const by = m.addedReal ? `${m.addedBy} (${m.addedReal})` : m.addedBy;
     const threat = m.threat === null ? "" : ` &middot; ${plural(m.threat, "threat", "threat")}${m.threat === 0 ? " (won't be pulled automatically)" : ""}`;
     return `<li>
@@ -330,7 +459,7 @@ function renderMobList(sel, inDialog) {
         ${canPull ? `<button class="btn btn-primary btn-small" data-pull-mob="${m.id}">Pull<span class="sr-only"> ${escapeHtml(m.name)}</span></button>` : ""}
         ${host || m.addedById === view.you.memberId ? `<button class="li-remove" data-remove-mob="${m.id}" aria-label="Remove ${escapeHtml(m.name)} from the Mob List">&times;</button>` : ""}
       </li>`;
-  }).join("") : `<li class="empty-row muted">No topics scouted yet. Add the first one above.</li>`;
+  }).join("") : `<li class="empty-row muted">No topics scouted yet. Add the first one above.</li>`);
 }
 
 function addMobFrom(form) {
@@ -359,17 +488,17 @@ const describedBy = (m) => (m.desc ? ` aria-describedby="ballot-desc-${m.id}"` :
 function renderVoting() {
   const t = view.threat;
   const me = view.members.find((m) => m.id === view.you.memberId);
-  $("#vote-count").textContent = `${t.voters} of ${view.members.length} voted`;
-  $("#vote-intro").textContent = t.revealed
-    ? "Threat is revealed. Bosses are pulled highest threat first, and their HP slides with it. Topics with no threat won't be pulled."
-    : `Each player has ${t.budget} threat to spread across the topics. Put it on whatever worries you most; you can stack it all on one. Ballots stay hidden until the host reveals them.`;
+  setText($("#vote-count"), `${t.voters} of ${view.members.length} voted`);
+  setText($("#vote-intro"), t.revealed
+    ? "Threat is revealed. Bosses are pulled highest threat first, and threat sets their tier: the bigger the boss, the more of its plan the party must own. Topics with no threat won't be pulled."
+    : `Each player has ${t.budget} threat to spread across the topics. Put it on whatever worries you most; you can stack it all on one. Ballots stay hidden until the host reveals them.`);
 
   const gate = $("#ballot-gate");
   const showGate = LOCAL && !t.revealed && me && ballotOpenFor !== me.id;
   gate.classList.toggle("hidden", !showGate);
   if (showGate) {
-    gate.innerHTML = `<p>Ballots are private. Hand the screen to <b>${escapeHtml(me.name)}</b>${me.hasThreatVoted ? " (already voted; they can change it)" : ""}.</p>
-      <button class="btn btn-primary" data-open-ballot="${me.id}">I'm ${escapeHtml(me.name)}: show my ballot</button>`;
+    setHtml(gate, `<p>Ballots are private. Hand the screen to <b>${escapeHtml(me.name)}</b>${me.hasThreatVoted ? " (already voted; they can change it)" : ""}.</p>
+      <button class="btn btn-primary" data-open-ballot="${me.id}">I'm ${escapeHtml(me.name)}: show my ballot</button>`);
   }
   $("#ballot").classList.toggle("hidden", showGate);
   $("#ballot-done").classList.toggle("hidden", !(LOCAL && !t.revealed));
@@ -380,22 +509,21 @@ function renderVoting() {
   const top = Math.max(0, ...view.mobList.map((m) => m.threat || 0));
 
   if (t.revealed) {
-    $("#ballot-budget").textContent = "";
+    setText($("#ballot-budget"), "");
     const ranked = [...view.mobList].sort((a, b) => b.threat - a.threat);
-    $("#ballot-list").innerHTML = ranked.length ? ranked.map((m) => {
-      const hp = bossHp(m.threat, top);
+    setHtml($("#ballot-list"), ranked.length ? ranked.map((m) => {
       return `<li class="ballot-row revealed">
           ${ballotTopic(m)}
           <span class="ballot-total">${plural(m.threat, "threat", "threat")}</span>
-          <span class="ballot-hp">${m.threat ? `${hp} HP &middot; ${tierForHp(hp).label}` : "Not pulled"}</span>
+          <span class="ballot-hp">${m.threat ? tierPreview(tierForThreat(m.threat, top)) : "Not pulled"}</span>
         </li>`;
-    }).join("") : `<li class="empty-row muted">No topics on the Mob List.</li>`;
+    }).join("") : `<li class="empty-row muted">No topics on the Mob List.</li>`);
   } else if (!me) {
-    $("#ballot-budget").textContent = "Create a character to vote.";
-    $("#ballot-list").innerHTML = "";
+    setText($("#ballot-budget"), "Create a character to vote.");
+    setHtml($("#ballot-list"), "");
   } else {
-    $("#ballot-budget").textContent = `${left} of ${t.budget} threat left${LOCAL ? ` for ${me.name}` : ""}.`;
-    $("#ballot-list").innerHTML = view.mobList.length ? view.mobList.map((m) => {
+    setText($("#ballot-budget"), `${left} of ${t.budget} threat left${LOCAL ? ` for ${me.name}` : ""}.`);
+    setHtml($("#ballot-list"), view.mobList.length ? view.mobList.map((m) => {
       const n = ballot[m.id] || 0;
       return `<li class="ballot-row">
           ${ballotTopic(m)}
@@ -405,7 +533,7 @@ function renderVoting() {
             <button class="btn btn-ghost btn-step" data-threat="${m.id}" data-delta="1" ${left === 0 ? "disabled" : ""} aria-label="Add threat to ${escapeHtml(m.name)}"${describedBy(m)}>+</button>
           </span>
         </li>`;
-    }).join("") : `<li class="empty-row muted">No topics on the Mob List yet. The host can step back to Scouting.</li>`;
+    }).join("") : `<li class="empty-row muted">No topics on the Mob List yet. The host can step back to Scouting.</li>`);
   }
 
   $("#vote-controls").classList.toggle("hidden", !isHost());
@@ -431,6 +559,9 @@ function renderEncounters() {
 }
 
 const live = () => !!view.boss && view.boss.status === "active";
+// Preparation: the party plans before the fight, and HP doesn't exist yet.
+const preparing = () => live() && view.boss.phase === "prep";
+const tierPreview = (tier) => `${tierLabel(tier)} &middot; needs ${plural(BOSS_TIERS[tier].minTactics, "tactic", "tactics")}`;
 const voteOpen = () => !!view.activeDrop && !view.resolved;
 
 function renderStageControls() {
@@ -439,47 +570,69 @@ function renderStageControls() {
   const anyThreat = view.mobList.some((m) => m.threat > 0);
   $("#btn-pull-boss").classList.toggle("hidden", live());
   $("#btn-pull-boss").disabled = !anyThreat;
-  $("#btn-drop-random").classList.toggle("hidden", !live());
-  $("#btn-drop-manual").classList.toggle("hidden", !live());
-  $("#btn-call-it").classList.toggle("hidden", !live());
-  $("#btn-call-it").disabled = voteOpen();
+  // preparing: Engage (once the plan is big enough); fighting: drops and victory
+  const prep = preparing();
+  const need = prep ? BOSS_TIERS[view.boss.tier].minTactics - view.boss.tactics.length : 0;
+  $("#btn-engage").classList.toggle("hidden", !prep);
+  $("#btn-engage").disabled = need > 0;
+  $("#engage-hint").classList.toggle("hidden", !prep || need <= 0);
+  setText($("#engage-hint"), need > 0 ? `Needs ${plural(need, "more proposed tactic", "more proposed tactics")}` : "");
+  for (const id of ["#btn-drop-random", "#btn-drop-manual", "#btn-tactical"]) $(id).classList.toggle("hidden", !live() || prep);
+  $("#btn-tactical").disabled = voteOpen();
   $("#btn-clear-stage").classList.toggle("hidden", !view.boss || live());
   $("#tactic-composer").classList.toggle("hidden", !live());
 }
 
 const STATUS_LINE = {
-  retreated: (name) => `${icon("flag")} ${name} retreats. The room agreed the problem is covered.`,
+  tactical: (name, boss) => `${icon("flag")} Tactical Victory over ${name}! ${boss.note ? `Note: ${escapeHtml(boss.note)}.` : "The room agreed the problem is handled."}`,
+  abandoned: (name) => `${icon("flag")} ${name} was abandoned: the raid ended mid-fight.`,
   enraged: (name) => `${icon("hourglass")} ${name} enrages! Time ran out, so the encounter wraps up here.`,
 };
 
 function renderBoss() {
   const el = $("#boss");
   const boss = view.boss;
-  if (!boss) { el.classList.add("hidden"); return; }
-  const pct = Math.max(0, Math.round((boss.hp / boss.hpMax) * 100));
+  if (!boss) { el.classList.toggle("hidden", true); return; }
+  const prep = boss.phase === "prep";
+  const pct = boss.hpMax == null ? 100 : Math.max(0, Math.round((boss.hp / boss.hpMax) * 100));
   const looted = view.log.filter((t) => t.bossId === boss.id && !t.passedOver).length;
-  el.className = `boss status-${boss.status}`;
+  setClass(el, `boss status-${boss.status}`);
   el.style.setProperty("--boss-color", TIER_COLOR[boss.tier] || TIER_COLOR.normal);
-  const status = boss.status === "active" ? `${Math.ceil(boss.hp)} / ${boss.hpMax} HP` : BOSS_STATUS[boss.status].toUpperCase();
+  const hpText = boss.hpMax == null ? "??? HP" : `${Math.ceil(boss.hp)} / ${boss.hpMax} HP`;
+  const status = boss.status === "active" ? hpText
+    : boss.status === "slain" ? BOSS_STATUS.slain.toUpperCase()
+    : `${BOSS_STATUS[boss.status].toUpperCase()} · ${hpText}`; // what was left when it ended
   let line;
   if (boss.status === "slain") line = slainLine(boss.name, looted);
-  else if (boss.status !== "active") line = `${STATUS_LINE[boss.status](escapeHtml(boss.name))} ${plural(looted, "piece", "pieces")} of loot claimed.`;
-  else line = "Propose tactics. Every tactic someone owns damages the boss, and weightier fixes hit harder.";
-  el.innerHTML = `
+  else if (boss.status !== "active") line = `${STATUS_LINE[boss.status](escapeHtml(boss.name), boss)} ${plural(looted, "piece", "pieces")} of loot claimed.`;
+  else if (prep) {
+    const need = BOSS_TIERS[boss.tier].minTactics;
+    line = `Prepare: propose tactics and rally behind the best. The boss's HP is set from your plan when the host engages. `
+      + `${plural(boss.tactics.length, "tactic", "tactics")} proposed &middot; needs ${need} to engage.`;
+  } else line = `Every tactic someone owns damages the boss. Owning ${Math.round(BOSS_TIERS[boss.tier].hpPct * 100)}% of the plan's damage brings it down; new tactics add to its HP.`;
+  setHtml(el, `
+    <span class="boss-glow" aria-hidden="true"></span>
     <div class="boss-head">
       <h3 class="boss-name"><span class="skull">${boss.status === "slain" ? icon("swords") : icon("skull")}</span>${escapeHtml(boss.name)}</h3>
       <div class="boss-tier">${tierLabel(boss.tier)}</div>
     </div>
     ${boss.desc ? `<div class="boss-desc-text">${escapeHtml(boss.desc)}</div>` : ""}
     <div class="boss-scout">${boss.scoutedBy ? `Scouted by ${escapeHtml(boss.scoutedBy)} &middot; ` : ""}${plural(boss.threat || 0, "threat", "threat")}</div>
-    <div class="boss-hpwrap" role="meter" aria-label="Boss health" aria-valuemin="0" aria-valuemax="${boss.hpMax}" aria-valuenow="${Math.ceil(boss.hp)}" aria-valuetext="${status}">
-      <div class="boss-hp" style="width:${pct}%;"></div>
-      <div class="boss-hptext" aria-hidden="true">${status}</div>
-    </div>
+    ${prep
+      // no value to measure yet, so plain text rather than a meter
+      ? `<div class="boss-hpwrap unknown">
+          <div class="boss-hp" style="width:100%;"></div>
+          <div class="boss-hptext" aria-hidden="true">${status}</div>
+          <span class="sr-only">Boss health: unknown until the party engages.</span>
+        </div>`
+      : `<div class="boss-hpwrap" role="meter" aria-label="Boss health" aria-valuemin="0" aria-valuemax="${boss.hpMax}" aria-valuenow="${Math.ceil(boss.hp)}" aria-valuetext="${status}">
+          <div class="boss-hp" style="width:${pct}%;"></div>
+          <div class="boss-hptext" aria-hidden="true">${status}</div>
+        </div>`}
     <div class="${boss.status === "active" ? "boss-sub" : "boss-slain-line"}">${line}</div>
     <div id="enrage-timer" class="timer-slot"></div>
-    ${renderTactics(boss)}`;
-  if (boss.status === "active") renderTimer($("#enrage-timer"), "enrage", boss.enrage, isHost(), "Enrage timer");
+    ${renderTactics(boss)}`);
+  if (boss.status === "active" && !prep) renderTimer($("#enrage-timer"), "enrage", boss.enrage, isHost(), "Enrage timer");
   else delete timers.enrage;
 }
 
@@ -524,7 +677,7 @@ function renderTactics(boss) {
     else if (s.rallyable && hasChar) {
       rally = `<button class="btn ${s.rallied ? "btn-primary" : "btn-ghost"} btn-small" data-rally-tactic="${s.id}" aria-pressed="${s.rallied}">${s.rallied ? "&#10003; Rallied" : "Rally"}<span class="sr-only"> behind ${escapeHtml(s.name)}</span></button>`;
     }
-    const drop = canEdit
+    const drop = canEdit && !preparing() // nothing drops until the boss is engaged
       ? `<button class="btn btn-primary btn-small" data-drop-tactic="${s.id}" ${voteOpen() ? "disabled" : ""}>Drop<span class="sr-only"> ${escapeHtml(s.name)}</span></button>` : "";
     return `<li class="tactic ${statusCls}">
         <span class="tactic-name r-${s.rarity}">${escapeHtml(s.name)}</span>
@@ -551,27 +704,28 @@ function renderActiveDrop() {
     let hint;
     if (!view.boss) hint = host ? `The dungeon is quiet. ${left} ${waiting ? "Pull a Boss takes the highest threat first." : "Pull one by hand from the Mob List."}` : `The dungeon is quiet. ${left} Waiting for the host to pull a boss…`;
     else if (!live()) hint = host ? `The encounter is over. ${left} Pull the next boss, or clear the stage.` : `The encounter is over. Waiting for the host…`;
+    else if (preparing()) hint = host ? "The party is preparing. When the plan is ready, Engage sets the boss's HP and the fight begins." : "The party is preparing: propose tactics above and rally behind the best. The host engages when the plan is ready.";
     else hint = host ? "The boss is engaged! Check a proposed tactic's rarity, then drop it to roll for it." : "The boss is engaged! Propose a tactic above, or rally behind one; the host drops proposed tactics for the roll.";
-    el.className = "active-drop empty";
-    el.innerHTML = `<p class="empty-hint">${hint}</p>`;
+    setClass(el, "active-drop empty");
+    setHtml(el, `<p class="empty-hint">${hint}</p>`);
     return;
   }
   const r = drop.item.rarity;
-  el.className = "active-drop filled";
-  el.innerHTML = `
+  setClass(el, "active-drop filled");
+  setHtml(el, `
     <div class="drop-icon r-${r}">${icon("gem")}</div>
     <div class="drop-meta">
       <h3 class="r-${r}">${escapeHtml(drop.item.name)}</h3>
       <div class="drop-rarity">${rarityTag(drop.item)}</div>
       ${drop.item.desc ? `<div class="drop-desc">${escapeHtml(drop.item.desc)}</div>` : ""}
-    </div>`;
+    </div>`);
 }
 
 function renderMyVote() {
   const bar = $("#my-vote");
   // local mode votes from each party panel instead
-  if (LOCAL || !voteOpen()) { bar.classList.add("hidden"); return; }
-  bar.classList.remove("hidden");
+  if (LOCAL || !voteOpen()) { bar.classList.toggle("hidden", true); return; }
+  bar.classList.toggle("hidden", false);
   const me = view.members.find((m) => m.id === view.you.memberId);
   const full = !!me && me.slotsUsed >= view.bagSize;
   for (const b of $$("[data-mychoice]")) {
@@ -580,29 +734,29 @@ function renderMyVote() {
     b.disabled = !me || (full && choice !== "pass");
     b.classList.toggle("active", on);
     b.setAttribute("aria-pressed", String(on));
-    b.innerHTML = `${on ? "&#10003; " : ""}${cap(choice)}`;
+    setHtml(b, `${on ? "&#10003; " : ""}${cap(choice)}`);
   }
-  $("#my-vote-hint").textContent = !me ? "Claim a party slot to vote."
+  setText($("#my-vote-hint"), !me ? "Claim a party slot to vote."
     : full ? bagsFullMessage(me.slotsUsed, view.bagSize)
     : view.you.myChoice ? `You chose ${cap(view.you.myChoice)}. Select it again to undo.`
-    : "Your choice is hidden from others until the host resolves.";
+    : "Your choice is hidden from others until the host resolves.");
 }
 
 function renderTally() {
   const bar = $("#resolve-bar");
-  if (!voteOpen()) { bar.classList.add("hidden"); return; }
-  bar.classList.remove("hidden");
+  if (!voteOpen()) { bar.classList.toggle("hidden", true); return; }
+  bar.classList.toggle("hidden", false);
   const t = view.tally;
-  $("#vote-tally").innerHTML = `<span>Need <b>${t.need}</b></span><span>Greed <b>${t.greed}</b></span>
-    <span>Pass <b>${t.pass}</b></span><span class="muted">Undecided <b>${t.undecided}</b></span>`;
+  setHtml($("#vote-tally"), `<span>Need <b>${t.need}</b></span><span>Greed <b>${t.greed}</b></span>
+    <span>Pass <b>${t.pass}</b></span><span class="muted">Undecided <b>${t.undecided}</b></span>`);
   $("#btn-resolve").classList.toggle("hidden", !isHost());
 }
 
 function renderResult() {
   const el = $("#result-banner");
   const res = view.lastResult;
-  if (!view.resolved || !res) { el.classList.add("hidden"); return; }
-  el.classList.remove("hidden");
+  if (!view.resolved || !res) { el.classList.toggle("hidden", true); return; }
+  el.classList.toggle("hidden", false);
   const r = res.rarity;
   const headline = res.winnerId
     ? `<span class="r-${r}">${escapeHtml(res.winnerName)}</span>${res.winnerReal ? ` <span class="real-name">(${escapeHtml(res.winnerReal)})</span>` : ""} wins <b class="r-${r}">${escapeHtml(res.itemName)}</b> (${RARITY[r].label}) by <b>${res.winnerContext}</b> roll!`
@@ -615,7 +769,7 @@ function renderResult() {
       : `${cap(rw.choice)} &mdash; rolled <b>${rw.roll}</b>`;
     return `<div class="roll-row">${escapeHtml(rw.name)}${who}: ${txt}${win}</div>`;
   }).join("");
-  el.innerHTML = `<div class="winner-line">${headline}</div>${damageLine(res)}<div class="roll-detail">${rows}</div>`;
+  setHtml(el, `<div class="winner-line">${headline}</div>${damageLine(res)}<div class="roll-detail">${rows}</div>`);
 }
 
 /* ----- party, quest log and loot log ----- */
@@ -651,9 +805,9 @@ function bagsFullMessage(used, size) {
 }
 
 function renderParty() {
-  $("#party-count").innerHTML = `${plural(view.members.length, "member", "members")}${LOCAL ? "" : ` &middot; ${hostCrown()} Host &middot; ${youStar()} You`}`;
+  setHtml($("#party-count"), `${plural(view.members.length, "member", "members")}${LOCAL ? "" : ` &middot; ${hostCrown()} Host &middot; ${youStar()} You`}`);
   const grid = $("#party-grid");
-  grid.innerHTML = view.members.map((m) => {
+  setHtml(grid, view.members.map((m) => {
     const color = CLASS_COLORS[m.cls] || "#c8aa6e";
     const mine = view.you.memberId === m.id;
     const initials = m.name.trim().slice(0, 2).toUpperCase() || "??";
@@ -709,7 +863,7 @@ function renderParty() {
             </li>`).join("")}
         </ul>
       </div>`;
-  }).join("");
+  }).join(""));
 }
 
 // Who owns how many open vs. done tasks (keyed by real name for accountability).
@@ -725,8 +879,8 @@ function renderAccountability() {
   section.classList.toggle("hidden", byOwner.size === 0);
   if (byOwner.size === 0) return;
   const rows = [...byOwner.values()].sort((a, b) => (b.open - a.open) || (b.open + b.done - a.open - a.done));
-  $("#accountability-sub").textContent = `${rows.reduce((n, r) => n + r.open, 0)} open across ${plural(rows.length, "person", "people")}`;
-  $("#accountability-list").innerHTML = rows.map((r) => {
+  setText($("#accountability-sub"), `${rows.reduce((n, r) => n + r.open, 0)} open across ${plural(rows.length, "person", "people")}`);
+  setHtml($("#accountability-list"), rows.map((r) => {
     const total = r.open + r.done;
     const charHint = r.key !== r.character ? ` <span class="acc-char">as ${escapeHtml(r.character)}</span>` : "";
     return `<li class="accountability-row${r.open === 0 ? " all-clear" : ""}">
@@ -737,14 +891,14 @@ function renderAccountability() {
           <span class="acc-bar" aria-hidden="true">${total ? `<span class="acc-bar-done" style="width:${Math.round((r.done / total) * 100)}%"></span>` : ""}</span>
         </span>
       </li>`;
-  }).join("");
+  }).join(""));
 }
 
 function renderLog() {
   const looted = view.log.filter((t) => !t.passedOver).length;
   const passed = view.log.length - looted;
-  $("#log-count").textContent = `${plural(looted, "item", "items")} looted${passed ? `, ${passed} passed over` : ""}`;
-  $("#loot-log-list").innerHTML = view.log.length ? [...view.log].reverse().map((t) => {
+  setText($("#log-count"), `${plural(looted, "item", "items")} looted${passed ? `, ${passed} passed over` : ""}`);
+  setHtml($("#loot-log-list"), view.log.length ? [...view.log].reverse().map((t) => {
     const name = `<span class="log-name r-${t.rarity}">${escapeHtml(t.name)}</span> ${rarityTag(t)}`;
     if (t.passedOver) {
       return `<li class="passed-over"><span class="log-text">${name}</span><span class="log-owner log-passed">&#8856; passed over</span></li>`;
@@ -754,7 +908,7 @@ function renderLog() {
         <span class="log-text">${name}</span>
         <span class="log-owner">${icon("person")} ${escapeHtml(t.ownerReal || t.ownerName)}${t.ownerReal ? ` <span class="log-char">as ${escapeHtml(t.ownerName)}</span>` : ""}</span>
       </li>`;
-  }).join("") : `<li class="empty-row muted">No loot has dropped yet.</li>`;
+  }).join("") : `<li class="empty-row muted">No loot has dropped yet.</li>`);
 }
 
 /* ---------------- Character creation ---------------- */
@@ -764,12 +918,22 @@ let chosenClass = "Warrior";
 
 function renderCreateChar() {
   const local = LOCAL;
-  $("#char-title").textContent = local ? "Add a Party Member" : "Create Your Character";
-  $("#char-intro").textContent = local
+  if (editingChar) {
+    setText($("#char-title"), "Edit Your Character");
+    setText($("#char-intro"), "Change your name, real name, race or class. Your loot stays with you.");
+    $("#btn-cancel-char").classList.remove("hidden");
+    setText($("#btn-create-char"), "Save Changes");
+    $("#reclaim").classList.toggle("hidden", true);
+    ensureValidClass();
+    renderFactionPicker(); renderRacePicker(); renderClassPicker();
+    return;
+  }
+  setText($("#char-title"), local ? "Add a Party Member" : "Create Your Character");
+  setText($("#char-intro"), local
     ? "Add each person at the table. Use Acting as at the top to switch who's posting, rallying or voting."
-    : "Pick a name and class. This becomes your own panel — no need to wait for the host.";
+    : "Pick a name and class. This becomes your own panel — no need to wait for the host.");
   $("#btn-cancel-char").classList.toggle("hidden", !(local && view.members.length));
-  $("#btn-create-char").textContent = local ? "Add to Party" : "Create Character";
+  setText($("#btn-create-char"), local ? "Add to Party" : "Create Character");
   renderReclaim();
   ensureValidClass();
   renderFactionPicker();
@@ -781,7 +945,7 @@ function renderCreateChar() {
 function renderReclaim() {
   const open = LOCAL ? [] : view.members.filter((m) => !m.claimed);
   $("#reclaim").classList.toggle("hidden", open.length === 0);
-  $("#reclaim-list").innerHTML = open.map((m) => {
+  setHtml($("#reclaim-list"), open.map((m) => {
     const tasks = view.log.filter((t) => t.ownerId === m.id && !t.passedOver && !t.done).length;
     return `<button class="reclaim-option" data-reclaim="${m.id}" style="--member-color:${CLASS_COLORS[m.cls] || "#c8aa6e"}">
         <span class="member-avatar" aria-hidden="true">${raceIcon(m.race)}</span>
@@ -791,32 +955,32 @@ function renderReclaim() {
           <span class="reclaim-sub">${plural(tasks, "open task", "open tasks")}</span>
         </span>
       </button>`;
-  }).join("");
+  }).join(""));
 }
 
 const checkMark = (on) => (on ? `<span class="pick-check" aria-hidden="true">&#10003;</span>` : "");
 
 function renderFactionPicker() {
   const chosen = FACTION[chosenRace];
-  $("#faction-picker").innerHTML = ["Alliance", "Horde"].map((f) => `
+  setHtml($("#faction-picker"), ["Alliance", "Horde"].map((f) => `
     <button class="faction-option${f === chosen ? " active" : ""}" data-faction="${f}" aria-pressed="${f === chosen}" style="--faction-color:${FACTION_COLOR[f]}">
       ${checkMark(f === chosen)}${factionIcon(f, "faction-icon")}<span class="pick-label">${f}</span>
-    </button>`).join("");
+    </button>`).join(""));
 }
 
 function renderRacePicker() {
   const faction = FACTION[chosenRace];
-  $("#race-picker").innerHTML = Object.keys(RACE_CLASSES).filter((r) => FACTION[r] === faction).map((race) => `
+  setHtml($("#race-picker"), Object.keys(RACE_CLASSES).filter((r) => FACTION[r] === faction).map((race) => `
     <button class="race-option${race === chosenRace ? " active" : ""}" data-race="${race}" aria-pressed="${race === chosenRace}" style="--faction-color:${FACTION_COLOR[faction]}">
       ${checkMark(race === chosenRace)}${raceIcon(race)}<span class="pick-label">${race}</span>
-    </button>`).join("");
+    </button>`).join(""));
 }
 
 function renderClassPicker() {
-  $("#class-picker").innerHTML = (RACE_CLASSES[chosenRace] || []).map((name) => `
+  setHtml($("#class-picker"), (RACE_CLASSES[chosenRace] || []).map((name) => `
     <button class="class-option${name === chosenClass ? " active" : ""}" data-cls="${name}" aria-pressed="${name === chosenClass}" style="--class-color:${CLASS_COLORS[name] || "#c8aa6e"}">
       ${checkMark(name === chosenClass)}${classIcon(name)}<span class="pick-label">${name}</span>
-    </button>`).join("");
+    </button>`).join(""));
 }
 
 // Switching faction moves you to its first race (and a class that race allows).
@@ -844,8 +1008,13 @@ function submitCharacter() {
   if (!name) { $("#char-error").textContent = "Enter a character name."; $("#char-name").focus(); return; }
   if (!realName) { $("#char-error").textContent = "Enter a real name (for accountability)."; $("#char-realname").focus(); return; }
   $("#char-error").textContent = "";
-  addingMember = false;
-  send({ type: "createCharacter", name, realName, cls: chosenClass, race: chosenRace });
+  if (editingChar) {
+    editingChar = false;
+    send({ type: "editCharacter", name, realName, cls: chosenClass, race: chosenRace });
+  } else {
+    addingMember = false;
+    send({ type: "createCharacter", name, realName, cls: chosenClass, race: chosenRace });
+  }
   $("#char-name").value = ""; $("#char-realname").value = "";
 }
 
@@ -874,13 +1043,13 @@ function toast({ kind, iconName, heading, title, lines = [], life = 5000 }) {
   announce(spoken.join(" "));
   const el = document.createElement("div");
   el.className = `loot-toast t-${kind}`;
-  el.innerHTML = `
+  setHtml(el, `
     <div class="toast-icon">${icon(iconName)}</div>
     <div class="toast-body">
       <div class="toast-received">${escapeHtml(heading)}</div>
       ${title ? `<div class="toast-item">${escapeHtml(title)}</div>` : ""}
       ${lines.map((l) => `<div class="toast-value">${l}</div>`).join("")}
-    </div>`;
+    </div>`);
   $("#toast-stack").appendChild(el);
   const remove = () => {
     el.classList.add("leaving");
@@ -894,6 +1063,17 @@ function toast({ kind, iconName, heading, title, lines = [], life = 5000 }) {
 function announceChanges() {
   const prev = prevView;
   if (!prev) return;
+  if (!prev.ended && view.ended) {
+    toast({ kind: "neutral", iconName: "trophy", heading: "The raid has ended", title: "Raid Summary", life: 5000 });
+    $("#summary-title").focus(); // the screen it was on is gone
+    return;
+  }
+  if (prev.ended && !view.ended) {
+    toast({ kind: "neutral", iconName: "flag", heading: "The raid was reopened", title: PHASE_LABEL[view.phase], life: 4000 });
+    $("#host-bar").querySelector("button:not(.hidden):not([disabled])")?.focus();
+    return;
+  }
+  if (view.ended) return;
   if (prev.bagSize !== view.bagSize && view.members.length) {
     toast({ kind: "neutral", iconName: "lootbag", heading: "Bag size changed", title: `Bags now hold ${view.bagSize}`,
       lines: [`Party of ${view.partySize}: ${TEAM_ACTION_BUDGET} actions shared, at least ${MIN_BAG_SLOTS} each.`], life: 4500 });
@@ -933,18 +1113,114 @@ function announceChanges() {
   if (boss && boss.status === "active" && (!before || before.id !== boss.id)) {
     toast({ kind: boss.tier === "raid" ? "legendary" : boss.tier === "elite" ? "epic" : "common", iconName: "skull",
       heading: "A boss approaches:", title: `[${boss.name}]`,
-      lines: [`<span class="rarity-label">${tierLabel(boss.tier)}</span> ${boss.hpMax} HP`] });
+      lines: [`<span class="rarity-label">${tierLabel(boss.tier)}</span> Prepare your tactics`] });
+  }
+  if (boss && before && before.id === boss.id && before.phase === "prep" && boss.phase === "fight" && boss.status === "active") {
+    toast({ kind: boss.tier === "raid" ? "legendary" : boss.tier === "elite" ? "epic" : "common", iconName: "swords",
+      heading: "Boss engaged!", title: `[${boss.name}]`, lines: [`${boss.hpMax} HP, built from ${plural(boss.tactics.length, "tactic", "tactics")}`] });
   }
   if (boss && before && before.id === boss.id && before.status === "active" && boss.status !== "active") {
     const looted = view.log.filter((t) => t.bossId === boss.id && !t.passedOver).length;
     if (boss.status === "slain") {
       toast({ kind: "legendary", iconName: "swords", heading: "Boss slain:", title: `[${boss.name}]`, lines: [`${plural(looted, "item", "items")} looted. Victory!`], life: 6500 });
-    } else if (boss.status === "retreated") {
-      toast({ kind: "neutral", iconName: "flag", heading: "The boss retreats", title: `[${boss.name}]`, lines: [`${plural(looted, "action", "actions")} claimed.`], life: 6000 });
+    } else if (boss.status === "tactical") {
+      // a soft win: blue and a banner, where a full kill is orange and swords
+      toast({ kind: "rare", iconName: "flag", heading: "Tactical Victory!", title: `[${boss.name}]`,
+        lines: [`The room agreed it's handled, with ${Math.ceil(boss.hp)} HP left. ${plural(looted, "action", "actions")} claimed.`], life: 6500 });
+    } else if (boss.status === "abandoned") {
+      toast({ kind: "neutral", iconName: "flag", heading: "Boss abandoned", title: `[${boss.name}]`, lines: ["The raid ended mid-fight."], life: 5000 });
     } else {
       toast({ kind: "neutral", iconName: "hourglass", heading: "The boss enrages", title: `[${boss.name}]`, lines: ["Time's up: the encounter wraps up here."], life: 6000 });
     }
   }
+}
+
+/* ---------------- Raid Summary ---------------- */
+// Team totals only: no per-player counts, gold, rankings or "most" anything.
+// Character sheets come from the engine sorted by real name.
+
+const whoText = (p) => (p.realName ? `${escapeHtml(p.realName)} (${escapeHtml(p.name)})` : escapeHtml(p.name));
+const names = (list) => list.map(whoText).join(", ");
+
+function renderSummary() {
+  const sum = view.summary;
+  const host = isHost();
+  $("#btn-reopen-raid").classList.toggle("hidden", !host);
+  const note = $("#summary-unsaved");
+  note.classList.toggle("hidden", !!view.persist);
+  setText(note, LOCAL
+    ? "This session isn't kept, so the Raid Summary disappears when this tab closes. Export the Loot Ledger to keep a copy, or tick Keep after the tab closes."
+    : "This room isn't saved, so the Raid Summary disappears when the room closes. Export the Loot Ledger to keep a copy.");
+
+  const t = sum.totals;
+  const banner = `<section class="summary-section" aria-labelledby="sum-totals">
+      <h3 id="sum-totals">Party totals</h3>
+      <dl class="summary-totals">
+        <div><dt>Bosses slain</dt><dd>${t.bossesSlain}</dd></div>
+        <div><dt>Tactical victories</dt><dd>${t.tacticalVictories}</dd></div>
+        <div><dt>Tactics owned</dt><dd>${t.tacticsOwned}</dd></div>
+        <div><dt>Achievements earned</dt><dd>${t.achievements}</dd></div>
+        <div><dt>Gold value of owned loot</dt><dd class="coins">${formatGold(t.gold)}</dd></div>
+      </dl>
+    </section>`;
+
+  const tacticLine = (a) => {
+    const state = a.owner ? `Owner: ${whoText(a.owner)}${a.done ? " &middot; done" : ""}`
+      : a.state === "passed" ? "Passed over" : "Never dropped";
+    return `<li class="summary-tactic"><span class="r-${a.rarity}">${escapeHtml(a.name)}</span> ${rarityTag(a)} <span class="muted">&mdash; ${state}</span></li>`;
+  };
+  const encounters = sum.encounters.map((e) => {
+    const facts = e.pulled
+      ? [e.tierLabel, e.hpMax == null ? "HP never set" : e.status === "slain" || e.status === "active" ? `${e.hpMax} HP` : `${e.hpLeft} of ${e.hpMax} HP left`,
+         e.threat !== null ? plural(e.threat, "threat", "threat") : "",
+         e.actionsTotal ? `${e.actionsOpen} of ${e.actionsTotal} actions open` : "no actions"]
+      : [e.threat !== null ? plural(e.threat, "threat", "threat") : "", `raised by ${whoText(e.raisedBy)}`];
+    const tactics = e.tactics.length
+      ? `<ul class="summary-list">${e.tactics.map(tacticLine).join("")}</ul>`
+      : e.pulled ? `<p class="muted">No tactics proposed.</p>` : "";
+    return `<li class="summary-encounter status-${e.status}">
+        <h4>${escapeHtml(e.name)}</h4>
+        <p class="summary-status"><span class="status-tag">${e.statusLabel}</span> ${facts.filter(Boolean).join(" &middot; ")}</p>
+        ${e.desc ? `<p class="summary-desc">${escapeHtml(e.desc)}</p>` : ""}
+        ${e.note ? `<p class="summary-note"><b>Note:</b> ${escapeHtml(e.note)}</p>` : ""}
+        ${e.status === "abandoned" ? `<p class="summary-note">The raid ended mid-fight.</p>` : ""}
+        ${tactics}
+      </li>`;
+  }).join("");
+  const other = sum.otherLoot.length
+    ? `<h4>Other looted items</h4><ul class="summary-list">${sum.otherLoot.map((x) => tacticLine({ ...x, state: "owned" })).join("")}</ul>` : "";
+
+  const achievements = sum.achievements.length ? `<ul class="summary-list summary-achievements">${sum.achievements.map((a) => `<li>
+        <span class="summary-ach-title r-${a.rarity}">${escapeHtml(a.title)}</span> ${rarityTag(a)}
+        ${a.detail ? `<p class="summary-desc">${escapeHtml(a.detail)}</p>` : ""}
+        <p class="muted">Posted by ${names(a.posters)}${a.rallies.length ? `. Rallied by ${names(a.rallies)}` : ""}.</p>
+      </li>`).join("")}</ul>` : `<p class="muted">No achievements were posted.</p>`;
+
+  const itemList = (items, label, empty) => `<h5>${label}</h5>${items.length
+    ? `<ul class="summary-list">${items.map((x) => `<li><span class="r-${x.rarity}">${escapeHtml(x.name || x.title)}</span> ${rarityTag(x)}${x.done ? ` <span class="muted">&middot; done</span>` : ""}</li>`).join("")}</ul>`
+    : `<p class="muted">${empty}</p>`}`;
+  const characters = sum.characters.length ? sum.characters.map((c) => `<li class="summary-character">
+      <h4>${escapeHtml(c.realName || c.name)}${c.realName ? ` <span class="muted">as ${escapeHtml(c.name)}</span>` : ""}</h4>
+      <p class="member-class">${c.faction ? `${c.faction} &middot; ` : ""}${escapeHtml(`${c.race} ${c.cls}`)}</p>
+      ${itemList(c.owned, "Tactics owned", "None")}
+      ${itemList(c.posted, "Achievements posted", "None")}
+      ${itemList(c.rallied, "Rallied behind", "None")}
+    </li>`).join("") : `<li class="empty-row muted">No party members.</li>`;
+
+  setHtml($("#summary-body"), `${banner}
+    <section class="summary-section" aria-labelledby="sum-encounters">
+      <h3 id="sum-encounters">Encounters</h3>
+      ${sum.encounters.length ? `<ul class="summary-encounters">${encounters}</ul>` : `<p class="muted">No topics were scouted.</p>`}
+      ${other}
+    </section>
+    <section class="summary-section" aria-labelledby="sum-achievements">
+      <h3 id="sum-achievements">Achievements</h3>
+      ${achievements}
+    </section>
+    <section class="summary-section" aria-labelledby="sum-characters">
+      <h3 id="sum-characters">Character sheets</h3>
+      <ul class="summary-characters">${characters}</ul>
+    </section>`);
 }
 
 /* ---------------- Dialogs ---------------- */
@@ -967,7 +1243,7 @@ function openModal(sel) {
 
 function closeModals(restore = true) {
   const wasOpen = $$(".modal").some((m) => !m.classList.contains("hidden"));
-  $$(".modal").forEach((m) => m.classList.add("hidden"));
+  $$(".modal").forEach((m) => m.classList.toggle("hidden", true));
   if (wasOpen && restore && dialogReturn && document.contains(dialogReturn)) dialogReturn.focus();
   if (restore) confirmResolve(false);
 }
@@ -993,7 +1269,10 @@ let confirmResolver = null;
 function confirmResolve(answer) {
   if (confirmResolver) { const r = confirmResolver; confirmResolver = null; r(answer); }
 }
-function confirmDialog(text, yesLabel = "Confirm") {
+// withNote shows an optional note field; read it from #confirm-note.
+function confirmDialog(text, yesLabel = "Confirm", { withNote = false } = {}) {
+  $("#confirm-note-wrap").classList.toggle("hidden", !withNote);
+  $("#confirm-note").value = "";
   $("#confirm-text").textContent = text;
   $("#btn-confirm-yes").textContent = yesLabel;
   openModal("#modal-confirm");
@@ -1010,18 +1289,18 @@ function refreshOpenModals() {
 
 function renderLootTableModal() {
   if (!$("#loot-rarity").options.length) $("#loot-rarity").innerHTML = rarityOptions("uncommon", false);
-  $("#loot-table-list").innerHTML = view.lootTable.length ? view.lootTable.map((l) => `<li>
+  setHtml($("#loot-table-list"), view.lootTable.length ? view.lootTable.map((l) => `<li>
       <span class="li-name r-${l.rarity}">${escapeHtml(l.name)}</span>
       <span class="li-sub">${rarityTag(l)}${l.desc ? ` &middot; ${escapeHtml(l.desc)}` : ""}</span>
       <button class="li-remove" data-remove-loot="${l.id}" aria-label="Remove ${escapeHtml(l.name)}">&times;</button>
-    </li>`).join("") : `<li class="empty-row muted">No loot defined yet.</li>`;
+    </li>`).join("") : `<li class="empty-row muted">No loot defined yet.</li>`);
 }
 
 function renderRosterModal() {
-  $("#roster-intro").textContent = LOCAL
+  setText($("#roster-intro"), LOCAL
     ? "Everyone at the table. Add people with the Acting as menu, or a quick slot here."
-    : "Players create their own characters when they join. Use this only to add a proxy slot for someone who isn't online, or to kick / reassign.";
-  $("#roster-list").innerHTML = view.members.length ? view.members.map((m) => {
+    : "Players create their own characters when they join. Use this only to add a proxy slot for someone who isn't online, or to kick / reassign.");
+  setHtml($("#roster-list"), view.members.length ? view.members.map((m) => {
     const isMe = m.id === view.you.memberId;
     const word = isMe ? "you" : m.claimed ? "claimed" : m.held ? "away" : m.proxy ? "proxy" : "open";
     // An away player still counts towards bag size; Kick releases their slot.
@@ -1036,7 +1315,7 @@ function renderRosterModal() {
         ${mgmt}
         ${isMe && !LOCAL ? "" : `<button class="li-remove" data-remove-member="${m.id}" aria-label="Remove ${escapeHtml(m.name)} from the party">&times;</button>`}
       </li>`;
-  }).join("") : `<li class="empty-row muted">No party members yet.</li>`;
+  }).join("") : `<li class="empty-row muted">No party members yet.</li>`);
   const sel = $("#member-class");
   if (!sel.options.length) sel.innerHTML = CLASS_NAMES.map((c) => `<option>${c}</option>`).join("");
 }
@@ -1044,12 +1323,12 @@ function renderRosterModal() {
 function renderManualDropModal() {
   const claimed = new Set(view.log.filter((t) => !t.passedOver).map((t) => t.tacticId));
   const pool = view.lootTable.filter((l) => !claimed.has(l.id));
-  $("#manual-drop-list").innerHTML = pool.length ? pool.map((l) => `<li>
+  setHtml($("#manual-drop-list"), pool.length ? pool.map((l) => `<li>
       <span class="li-name r-${l.rarity}">${escapeHtml(l.name)}</span>
       <span class="li-sub">${rarityTag(l)}</span>
       <button class="btn btn-primary btn-small" data-drop-loot="${l.id}">Drop<span class="sr-only"> ${escapeHtml(l.name)}</span></button>
     </li>`).join("")
-    : `<li class="empty-row muted">${view.lootTable.length ? "Every backlog item has already been claimed." : "Add items to the loot table first."}</li>`;
+    : `<li class="empty-row muted">${view.lootTable.length ? "Every backlog item has already been claimed." : "Add items to the loot table first."}</li>`);
 }
 
 /* ---------------- Loot Ledger ---------------- */
@@ -1114,15 +1393,70 @@ $("#btn-create").addEventListener("click", () => {
   $("#lobby-error").textContent = "";
   send({ type: "create", persist: $("#create-persist").checked });
 });
+
+// Room code: uppercase A–Z / 0–9 only, four characters, whatever was typed or pasted.
+function syncJoinCode() {
+  const input = $("#join-code");
+  const link = input.value.match(/[?&]room=([a-z0-9]{4})/i); // a pasted invite link
+  const clean = cleanCode(link ? link[1] : input.value);
+  if (input.value !== clean) input.value = clean;
+  $("#btn-join").disabled = clean.length !== 4;
+}
+$("#join-code").addEventListener("input", syncJoinCode);
+$("#join-code").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#btn-join").click(); });
 $("#btn-join").addEventListener("click", () => {
-  const code = $("#join-code").value.trim().toUpperCase();
-  if (code.length < 3) { $("#lobby-error").textContent = "Enter the room code."; return; }
+  const code = cleanCode($("#join-code").value);
+  if (code.length !== 4) return;
   $("#lobby-error").textContent = "";
   send({ type: "join", room: code });
 });
-$("#join-code").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#btn-join").click(); });
 
-$("#btn-leave").addEventListener("click", async () => {
+$("#lobby-toggle").addEventListener("click", () => {
+  const open = $("#lobby-toggle").getAttribute("aria-expanded") !== "true";
+  $("#lobby-toggle").setAttribute("aria-expanded", String(open));
+  $("#lobby-lead").classList.toggle("hidden", !open);
+});
+$("#btn-how-to-play").addEventListener("click", () => openModal("#modal-howto"));
+
+// Copy text to the clipboard. The async clipboard API only exists on secure
+// origins (HTTPS or localhost), so plain-HTTP LAN addresses fall back to the
+// older copy command. Returns false if neither worked.
+async function copyText(text) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); return true; }
+  } catch { /* fall through */ }
+  const area = document.createElement("textarea");
+  area.value = text;
+  area.setAttribute("readonly", "");
+  area.style.cssText = "position:fixed;top:0;left:0;opacity:0;";
+  const back = document.activeElement;
+  document.body.append(area);
+  area.select();
+  let ok = false;
+  try { ok = document.execCommand("copy"); } catch { ok = false; }
+  area.remove();
+  back?.focus();
+  return ok;
+}
+
+$("#btn-copy-invite").addEventListener("click", async () => {
+  const label = $("#btn-copy-invite .room-copy-label");
+  const tail = $("#btn-copy-invite .room-copy-tail");
+  const link = inviteLink(view.room);
+  if (await copyText(link)) {
+    label.textContent = "Link copied"; tail.textContent = "";
+    announce("Invite link copied");
+    clearTimeout(label._reset);
+    label._reset = setTimeout(() => { label.textContent = "Copy invite"; tail.textContent = " link"; }, 2000);
+  } else {
+    // last resort: show the link, selected, for copying by hand
+    $("#invite-link").value = link;
+    openModal("#modal-invite");
+    $("#invite-link").select();
+  }
+});
+
+async function leaveGroup() {
   if (LOCAL) {
     if (await confirmDialog("Disband the group? This wipes the whole session: party, achievements, Mob List, bosses and loot.", "Disband")) {
       transport.disband();
@@ -1133,25 +1467,89 @@ $("#btn-leave").addEventListener("click", async () => {
   // bag size), then go once it confirms, or after a moment regardless.
   send({ type: "leave" });
   setTimeout(leaveRoom, 800);
-});
+}
 
 function leaveRoom() {
   const url = new URL(location.href); url.searchParams.delete("room");
   location.href = url.toString();
 }
 
-$("#acting-as").addEventListener("change", (e) => {
-  if (e.target.value === "__add") { addingMember = true; onState(view); $("#char-name").focus(); return; }
-  ballotOpenFor = null;
-  transport.setActingAs(e.target.value);
+// the character menu and the save-status tip
+for (const id of ["#btn-char", "#btn-menu"]) {
+  $(id).addEventListener("click", () => setYouPanel($("#you-panel").classList.contains("hidden")));
+}
+$("#btn-save-info").addEventListener("click", () => setSaveTip($("#save-tip").classList.contains("hidden")));
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  if (!$("#you-panel").classList.contains("hidden")) { setYouPanel(false, { returnFocus: true }); e.stopPropagation(); }
+  if (!$("#save-tip").classList.contains("hidden")) { setSaveTip(false); $("#btn-save-info").focus(); }
+}, true);
+document.addEventListener("pointerdown", (e) => {
+  if (!e.target.closest("#you-wrap")) setYouPanel(false);
+  if (!e.target.closest("#save-status")) setSaveTip(false);
 });
+// Tabbing out closes them too, so focus never lands on page content hidden
+// under an open panel (WCAG 2.4.11).
+$("#you-wrap").addEventListener("focusout", (e) => {
+  if (e.relatedTarget && !e.relatedTarget.closest("#you-wrap")) setYouPanel(false);
+});
+$("#save-status").addEventListener("focusout", (e) => {
+  if (e.relatedTarget && !e.relatedTarget.closest("#save-status")) setSaveTip(false);
+});
+// panel items act, then the panel closes (dialogs return focus to the trigger)
+$("#you-panel").addEventListener("click", (e) => {
+  const item = e.target.closest("button.you-item");
+  if (!item) return;
+  if (item.dataset.actAs) {
+    if (item.dataset.actAs === "__add") { setYouPanel(false); addingMember = true; onState(view); $("#char-name").focus(); return; }
+    ballotOpenFor = null;
+    transport.setActingAs(item.dataset.actAs);
+    return; // stays open so you can see who's selected
+  }
+  const tool = item.dataset.tool;
+  if (!tool) return;
+  // focus the trigger first, so the dialog hands focus back to it on close
+  setYouPanel(false);
+  visibleTrigger().focus();
+  if (tool === "leave") leaveGroup();
+  else if (tool === "edit") startEditCharacter();
+  else if (tool === "export") send({ type: "ledger" });
+  else openModal({ mobs: "#modal-mobs", roster: "#modal-roster", config: "#modal-config", howto: "#modal-howto" }[tool]);
+});
+function startEditCharacter() {
+  const m = me();
+  if (!m) return;
+  editingChar = true;
+  $("#char-name").value = m.name;
+  $("#char-realname").value = m.realName;
+  chosenRace = m.race; chosenClass = m.cls;
+  onState(view);
+  $("#char-name").focus();
+}
 $("#keep-session").addEventListener("change", (e) => transport.setKeep(e.target.checked));
 
 $("#btn-create-char").addEventListener("click", submitCharacter);
-$("#btn-cancel-char").addEventListener("click", () => { addingMember = false; onState(view); });
+$("#btn-cancel-char").addEventListener("click", () => {
+  const wasEditing = editingChar;
+  addingMember = editingChar = false;
+  $("#char-name").value = ""; $("#char-realname").value = "";
+  onState(view);
+  if (wasEditing) visibleTrigger().focus();
+});
 for (const id of ["#char-name", "#char-realname"]) $(id).addEventListener("keydown", (e) => { if (e.key === "Enter") submitCharacter(); });
 
 $("#btn-phase-next").addEventListener("click", () => send({ type: "setPhase", phase: PHASES[PHASES.indexOf(view.phase) + 1] }));
+$("#btn-end-raid").addEventListener("click", async () => {
+  if (await confirmDialog("End the raid? Everyone moves to the Raid Summary and the room becomes read-only. A boss still being fought is abandoned.", "End Raid")) {
+    send({ type: "endRaid" });
+  }
+});
+$("#btn-reopen-raid").addEventListener("click", async () => {
+  if (await confirmDialog("Reopen the raid? Everyone goes back to the session and can make changes again.", "Reopen Raid")) {
+    send({ type: "reopenRaid" });
+  }
+});
+$("#btn-summary-export").addEventListener("click", () => send({ type: "ledger" }));
 $("#btn-phase-back").addEventListener("click", () => send({ type: "setPhase", phase: PHASES[PHASES.indexOf(view.phase) - 1] }));
 
 $("#btn-post-ach").addEventListener("click", () => {
@@ -1177,12 +1575,13 @@ $("#btn-hide-ballot").addEventListener("click", () => { ballotOpenFor = null; re
 
 $("#btn-pull-boss").addEventListener("click", () => send({ type: "pullBoss" }));
 $("#btn-mobs").addEventListener("click", () => openModal("#modal-mobs"));
-$("#btn-call-it").addEventListener("click", async () => {
-  if (await confirmDialog("Call it? The boss retreats: the room agrees the problem is covered. Owned actions stay on the plan.", "Call It")) {
-    send({ type: "callIt" });
+$("#btn-tactical").addEventListener("click", async () => {
+  if (await confirmDialog("Declare a Tactical Victory? The room agrees this problem is handled, even though the boss isn't fully beaten. Owned actions stay on the plan.", "Tactical Victory", { withNote: true })) {
+    send({ type: "tacticalVictory", note: $("#confirm-note").value });
   }
 });
 $("#btn-clear-stage").addEventListener("click", () => send({ type: "clearStage" }));
+$("#btn-engage").addEventListener("click", () => send({ type: "engageBoss" }));
 $("#btn-drop-random").addEventListener("click", () => send({ type: "drop" }));
 $("#btn-drop-manual").addEventListener("click", () => openModal("#modal-manual"));
 // Online, every tactic starts at Common and rallies raise it. Local mode has
@@ -1200,15 +1599,13 @@ $("#btn-propose-tactic").addEventListener("click", () => {
 });
 for (const id of ["#tc-name", "#tc-desc"]) $(id).addEventListener("keydown", (e) => { if (e.key === "Enter") $("#btn-propose-tactic").click(); });
 $("#btn-resolve").addEventListener("click", () => send({ type: "resolve" }));
-$("#btn-config").addEventListener("click", () => openModal("#modal-config"));
 $("#btn-roster").addEventListener("click", () => openModal("#modal-roster"));
 $("#btn-export").addEventListener("click", () => send({ type: "ledger" }));
 
 $("#btn-copy-ledger").addEventListener("click", async () => {
-  try {
-    await navigator.clipboard.writeText($("#ledger-text").value);
+  if (await copyText($("#ledger-text").value)) {
     $("#ledger-status").textContent = "Copied to the clipboard.";
-  } catch {
+  } else {
     $("#ledger-text").select();
     $("#ledger-status").textContent = "Couldn't copy automatically. The text is selected: press Ctrl+C or Cmd+C.";
   }
@@ -1302,13 +1699,33 @@ $("[data-tc-toggle]").addEventListener("click", () => {
 });
 try { setComposerCollapsed(localStorage.getItem(TC_COLLAPSED_KEY) === "1"); } catch { /* start open */ }
 
+// --header-h is the sticky header's height (0 when it scrolls away, as on
+// phones), so toasts sit below it and focused elements aren't hidden under it.
+function trackHeaderHeight() {
+  const bar = $("#topbar");
+  const sticky = getComputedStyle(bar).position === "sticky";
+  document.documentElement.style.setProperty("--header-h", `${sticky ? bar.offsetHeight : 0}px`);
+}
+new ResizeObserver(trackHeaderHeight).observe($("#topbar"));
+addEventListener("resize", trackHeaderHeight); // stickiness changes at the breakpoints
+
 /* ---------------- Boot ---------------- */
 
 if (LOCAL) {
-  $("#conn-status").classList.add("hidden");
+  $("#conn-status").classList.toggle("hidden", true);
   const { createLocalTransport } = await import("./local-mode.js");
   transport = createLocalTransport({ onState, onError, onLedger: showLedger });
 } else {
   transport = createWsTransport();
+  // An invite link joins straight away; show which room meanwhile, with the
+  // code filled in so a dead link can be corrected and retried.
+  const room = roomFromUrl();
+  if (room) {
+    $("#join-code").value = room;
+    syncJoinCode();
+    $("#lobby-joining").textContent = `Joining room ${room}…`;
+    $("#lobby-joining").classList.remove("hidden");
+    showScreen("lobby");
+  }
 }
 transport.start();

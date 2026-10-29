@@ -26,47 +26,60 @@ export function rarityRank(rarity) {
 
 /* ---------------- Boss HP and damage ---------------- */
 
-// Damage a resolved tactic deals, by its rarity: heavier fixes hit harder.
+// Damage a resolved tactic deals: a flat base plus a small bonus for rarity.
 // Only owned tactics count; one everyone passed on deals no damage.
-export const TACTIC_DAMAGE = { poor: 15, common: 30, uncommon: 50, rare: 80, epic: 120, legendary: 200 };
+export const TACTIC_BASE_DAMAGE = 40;
+export const RARITY_BONUS = { poor: 0, common: 5, uncommon: 10, rare: 20, epic: 30, legendary: 50 };
+export const TACTIC_DAMAGE = Object.fromEntries(
+  RARITIES.map((r) => [r, TACTIC_BASE_DAMAGE + RARITY_BONUS[r]])); // 40, 45, 50, 60, 70, 90
 
 export function tacticDamage(rarity, owned) {
   return owned ? (TACTIC_DAMAGE[rarity] || TACTIC_DAMAGE.uncommon) : 0;
 }
 
-// Boss HP slides with the threat the party voted onto its topic:
-// HP = HP_BASE + (votes / topVotes) * HP_RANGE, so the top topic always has
-// HP_BASE + HP_RANGE and an unvoted topic has HP_BASE.
-export const HP_BASE = 60;
-export const HP_RANGE = 440;
+// A boss's tier comes from its topic's share of the top threat. Its HP is
+// built from the tactics the party proposes: when the facilitator engages,
+// HP = hpPct of their total damage. So the party has to own most of its own
+// plan (more of it for bigger bosses), and inflating rarity raises HP as much
+// as damage. Engaging needs at least minTactics proposed.
+export const BOSS_TIERS = {
+  normal: { label: "Normal",    minShare: 0,    hpPct: 0.5,  minTactics: 1 },
+  elite:  { label: "Elite",     minShare: 0.3,  hpPct: 0.65, minTactics: 2 },
+  raid:   { label: "Raid Boss", minShare: 0.75, hpPct: 0.8,  minTactics: 3 },
+};
 
-export function bossHp(votes, topVotes) {
-  if (!topVotes || !(votes > 0)) return HP_BASE;
-  return Math.round(HP_BASE + (Math.min(votes, topVotes) / topVotes) * HP_RANGE);
-}
-
-// Tier labels are cosmetic bands derived from HP (highest band first).
-export const TIER_BANDS = [
-  { tier: "raid",   label: "Raid Boss", minHp: 380 },
-  { tier: "elite",  label: "Elite",     minHp: 200 },
-  { tier: "normal", label: "Normal",    minHp: 0 },
-];
-
-export function tierForHp(hp) {
-  return TIER_BANDS.find((b) => hp >= b.minHp) || TIER_BANDS[TIER_BANDS.length - 1];
+export function tierForThreat(votes, topVotes) {
+  const share = topVotes > 0 && votes > 0 ? Math.min(votes, topVotes) / topVotes : 0;
+  if (share >= BOSS_TIERS.raid.minShare) return "raid";
+  if (share >= BOSS_TIERS.elite.minShare) return "elite";
+  return "normal";
 }
 
 export function tierLabel(tier) {
-  const band = TIER_BANDS.find((b) => b.tier === tier);
-  return band ? band.label : "Normal";
+  return (BOSS_TIERS[tier] || BOSS_TIERS.normal).label;
+}
+
+// The HP a set of tactics (by rarity) gives a boss of this tier.
+export function hpFromTactics(rarities, tier) {
+  const total = rarities.reduce((sum, r) => sum + tacticDamage(r, true), 0);
+  return Math.ceil(total * (BOSS_TIERS[tier] || BOSS_TIERS.normal).hpPct);
+}
+
+// HP added by one more tactic or backlog item once the fight is on, and the
+// change when a tactic's rarity moves after engaging (negative if it drops).
+export function hpForDamage(damage, tier) {
+  const pct = (BOSS_TIERS[tier] || BOSS_TIERS.normal).hpPct;
+  return Math.sign(damage) * Math.ceil(Math.abs(damage) * pct);
 }
 
 // How an encounter ended (or that it hasn't).
 export const BOSS_STATUS = {
-  active:    "In progress",
+  active:    "In progress",      // see the boss's phase: "prep" or "fight"
   slain:     "Slain",
-  retreated: "Retreated",
+  tactical:  "Tactical Victory", // the room agreed the problem is handled
+  abandoned: "Abandoned",        // the raid ended mid-fight
   enraged:   "Enraged",
+  notPulled: "Not pulled",
 };
 
 /* ---------------- Threat voting ---------------- */
@@ -264,4 +277,5 @@ export const LIMITS = {
   lootName: 120,
   lootDesc: 500,
   timerMinutes: 120,
+  victoryNote: 200,
 };
