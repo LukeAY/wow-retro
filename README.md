@@ -58,9 +58,21 @@ ordering, and migrating old saved rooms.
 
 The lobby puts joining first: most people arrive with a code or a link.
 
-1. One person opens **Lead a new raid**, chooses whether to **Save this room**
-   (see below) and clicks **Create Room**. They become the **facilitator**
-   (host) and get a 4-character room code.
+1. One person opens **Lead a new raid**, optionally fills in the **Raid
+   details**, chooses whether to **Save this room** (see below) and clicks
+   **Create Room**. They become the **facilitator** (host) and get a
+   4-character room code. The raid details are:
+   - **Raid name** (up to 60 characters), e.g. "Sprint 42 Retro". Left blank,
+     the raid is called "Raid" plus the room code, e.g. "Raid XAB9".
+   - **Retro date**, which starts as today (in the browser's time zone).
+     **Today** resets it, and it's written out UK style under the box, e.g.
+     "Mon 2 Nov 2026". Clear it to have no date.
+
+   The name and date show in the header, on the Looking for Group page, on
+   Group Found, on the Raid Summary and in the Loot Ledger. The facilitator
+   can change both at any time with **Edit raid details** in the character
+   menu; everyone sees the change straight away. They lock when the raid
+   ends.
 2. The facilitator clicks **Copy invite** (next to the room code in the top
    bar) and shares the link. The link looks like
    `http://192.168.1.42:3000/?room=ABCD`: opening it joins that room
@@ -98,8 +110,9 @@ overview of the phases.
 
 Once you're in a room, the header is a slim bar with a phase tracker under it:
 
-- **Room chip** — the room code, plus **Copy invite** for the facilitator. It
-  briefly reads "Link copied".
+- **Raid** — the raid name (cut short with "…" when it's long; hover for all
+  of it) over "date · Room CODE", plus **Copy invite** for the facilitator,
+  which briefly reads "Link copied". On phones only the name and code show.
 - **Status** — **Connected** / **Connecting…** / **Disconnected** (it
   reconnects by itself), and **Saved** / **Not saved**. Select the save status
   for what it means.
@@ -107,7 +120,8 @@ Once you're in a room, the header is a slim bar with a phase tracker under it:
   **Loot Ledger**.
 - **Your character** — your avatar, name and "Real name · Race Class" (plus
   "Facilitator" for the host). It opens a menu with **Loot Table**
-  (facilitator), **Edit my character**, **How to play** and **Leave group**.
+  (facilitator), **Edit my character**, **Edit raid details** (facilitator),
+  **How to play** and **Leave group**.
   Edit my character reopens the character screen, prefilled; your loot stays
   with you.
 - **Phase tracker** — LFG › Achievements › Scout › Threat › Bosses › Summary, with
@@ -175,6 +189,9 @@ you're acting as.
 
 - **Threat ballots stay private** by passing the screen around: each person
   selects their name, opens their ballot, votes, then hides it again.
+- There's no lobby, so the raid name and date are set from **Edit raid
+  details** in the character menu. Unnamed, the raid is a "Single-screen
+  raid".
 - There's no **Looking for Group** phase: the session opens straight on
   Achievements, and the tracker starts there.
 - **Need / Greed / Pass** buttons appear on every party panel.
@@ -422,6 +439,17 @@ Saved rooms stay ended (and keep their summary) across a server restart.
 **Loot Ledger** opens a markdown action plan to copy or download. It uses
 plain language so it reads clearly outside the retro: tactics are listed as
 **actions**.
+
+It's headed with the raid name, with the date and room on the line below:
+
+```markdown
+# Sprint 42 Retro
+
+Mon 2 Nov 2026 · Room XAB9
+```
+
+The download is named from both, e.g. `sprint-42-retro-2026-11-02.md`
+(without a date, just `sprint-42-retro.md`).
 
 1. **Achievements** — Legendary first, with who posted and who rallied.
 2. **Each boss** — tier, HP, threat and status with its action count (e.g.

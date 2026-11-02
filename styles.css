@@ -1425,16 +1425,23 @@ textarea.field { width: 100%; resize: vertical; }
   text-shadow: 0 0 14px rgba(200,170,110,.45), 0 2px 2px rgba(0,0,0,.6);
 }
 
-/* room chip: ROOM over the code, then Copy invite */
-.room-chip { display: flex; align-items: center; gap: 10px; }
-.room-id { margin: 0; display: flex; flex-direction: column; line-height: 1.1; }
-.room-label { font-size: 0.625rem; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); }
-.room-code {
-  font-family: "Cinzel", "Marcellus", Georgia, serif; font-size: 1.375rem; font-weight: 700;
-  letter-spacing: .25em; color: var(--wow-yellow); white-space: nowrap;
+/* room chip: a thin divider, the raid title over "date · Room CODE", then Copy invite */
+/* It takes whatever room the bar has left (the title cuts short with "…"),
+   rather than pushing the rest onto a second row; it only wraps when the bar
+   is narrower than 14rem of it, as at high zoom. */
+.room-chip { display: flex; align-items: center; gap: 12px; flex: 1 1 0; min-width: 14rem; }
+.raid-divider { align-self: stretch; width: 1px; margin: 4px 0; background: linear-gradient(180deg, transparent, var(--frame-edge), transparent); }
+.raid-id { min-width: 0; display: flex; flex-direction: column; gap: 2px; line-height: 1.2; }
+.raid-title {
+  margin: 0; max-width: 300px;
+  font-family: "Cinzel", "Marcellus", Georgia, serif; font-size: 1rem; font-weight: 700;
+  color: var(--gold-bright);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+.raid-meta { margin: 0; font-size: 0.8125rem; color: var(--muted); white-space: nowrap; }
+.room-code { font-weight: 700; letter-spacing: .12em; color: var(--wow-yellow); }
 .room-chip.local .room-label { display: none; }
-.room-chip.local .room-code { font-size: 0.9375rem; letter-spacing: 1px; }
+.room-chip.local .room-code { letter-spacing: normal; font-weight: 400; color: var(--muted); }
 .room-copy { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; white-space: nowrap; }
 
 /* status: plain text, stacked */
@@ -1533,8 +1540,9 @@ textarea.field { width: 100%; resize: vertical; }
   .topbar-row { flex-wrap: nowrap; gap: 8px; padding: 6px 12px; min-height: 56px; }
   .brand-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .brand-mark { font-size: 1.5rem; }
-  .room-chip { gap: 6px; min-width: 0; }
-  .room-code { font-size: 1.125rem; letter-spacing: .15em; }
+  .room-chip { gap: 8px; min-width: 0; flex: 1 1 auto; }
+  .raid-divider, .raid-date, .raid-sep { display: none; } /* phones: just the title and code */
+  .raid-title { max-width: 100%; font-size: 0.9375rem; }
   .room-copy { min-height: 44px; min-width: 44px; padding: 0; justify-content: center; }
   .room-copy-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .status-stack, .bar-tools, .char-btn { display: none; }
@@ -1890,3 +1898,50 @@ textarea.field { width: 100%; resize: vertical; }
   .gf-actions { flex-direction: column; align-self: stretch; }
   .gf-actions .btn { width: 100%; }
 }
+
+/* ---------- Raid details: name and date ---------- */
+.raid-details-heading {
+  margin: 0;
+  font-family: "Cinzel", Georgia, serif;
+  font-size: 0.8125rem; font-weight: 700;
+  letter-spacing: 2px; text-transform: uppercase;
+  color: var(--gold);
+}
+.raid-details-intro { margin: 4px 0 0; color: var(--text); font-size: 0.875rem; }
+.raid-field { width: 100%; min-height: 44px; }
+.date-row { display: flex; gap: 8px; align-items: stretch; }
+.raid-date-input { flex: 1; min-width: 0; min-height: 44px; color-scheme: dark; }
+.date-today { min-height: 44px; flex-shrink: 0; }
+.date-written { margin: 6px 0 0; min-height: 1.25em; font-size: 0.875rem; color: var(--gold-bright); }
+.lobby-lead .lobby-check { margin-top: 14px; }
+
+/* Edit raid details (host) */
+#modal-raid .modal-close { min-width: 44px; min-height: 44px; }
+#modal-raid .form-actions .btn { min-height: 44px; }
+.char-count { margin: 4px 0 0; text-align: right; font-size: 0.75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.raid-edit-note { margin: 16px 0 0; font-size: 0.8125rem; color: var(--muted); }
+
+/* Looking for Group: the raid title under the heading */
+.lfg-raid-title {
+  margin: -6px 0 2px;
+  font-family: "Cinzel", Georgia, serif; font-size: 1.125rem; font-weight: 700;
+  color: var(--gold-bright);
+  overflow-wrap: anywhere;
+}
+.lfg-meta { margin: 0 0 16px; }
+
+/* Raid Summary: a small label over the raid title */
+.summary-kicker {
+  display: block;
+  font-size: 0.75rem; letter-spacing: 2px;
+  color: var(--gold);
+  text-shadow: none;
+}
+.summary-raid-title {
+  display: block; margin-top: 4px;
+  font-family: "Cinzel", Georgia, serif;
+  font-size: 1.75rem; line-height: 1.2;
+  text-transform: none; letter-spacing: 1px;
+  overflow-wrap: anywhere;
+}
+.summary-meta { margin: -6px 0 12px; color: var(--text); }

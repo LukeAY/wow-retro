@@ -283,4 +283,5 @@ export const LIMITS = {
   lootDesc: 500,
   timerMinutes: 120,
   victoryNote: 200,
+  raidName: 60,
 };

@@ -681,7 +681,7 @@ test("remediation steps migrate to tactics, keeping their picked rarity", () => 
   act(room, { memberId: "a", facilitator: true }, { type: "setTacticRarity", tacticId: picked.id, rarity: "uncommon" }, ctx);
   assert.equal(picked.rarityFrom, "rare");
   const ledger = buildLedger(room);
-  assert.match(ledger, /^# Retro Action Plan/);
+  assert.match(ledger, /^# Raid OLD\w+\n\nRoom OLD\w+\n/);
   assert.match(ledger, /Host changed — Epic \(changed from Common\) — owner: Ana R \(Ana\)/);
 });
 
@@ -787,4 +787,56 @@ test("rooms saved without a countdown, or outside LFG, migrate with none", () =>
   const stray = { durationMs: 5000, endsAt: 5000, remainingMs: 5000, paused: false };
   assert.equal(migrateRoom({ code: "OLD9", phase: "scouting", raidStart: stray, members: [], log: [] }).raidStart, null);
   assert.deepEqual(migrateRoom({ code: "OLDA", phase: "lfg", raidStart: stray, members: [], log: [] }).raidStart, stray);
+});
+
+/* ---------------- Raid details ---------------- */
+
+test("raid name and date default to blank, and the title falls back to the room code", () => {
+  const room = createRoom({ code: "XAB9" });
+  assert.equal(room.raidName, "");
+  assert.equal(room.raidDate, null);
+  const view = viewFor(room, { memberId: null, facilitator: false }, 0);
+  assert.equal(view.raidTitle, "Raid XAB9");
+  assert.equal(view.raidName, "");
+  assert.equal(view.raidDate, null);
+  assert.equal(viewFor(createRoom({ code: "LOCAL" }), { memberId: null }, 0).raidTitle, "Single-screen raid");
+});
+
+test("the raid name is trimmed and limited to 60; only real calendar dates are kept", () => {
+  const room = createRoom({ code: "XAB9", raidName: "  Sprint 42 Retro  ", raidDate: "2026-11-02" });
+  assert.equal(room.raidName, "Sprint 42 Retro");
+  assert.equal(room.raidDate, "2026-11-02");
+  assert.equal(viewFor(room, { memberId: null }, 0).raidTitle, "Sprint 42 Retro");
+  assert.equal(createRoom({ code: "X", raidName: "x".repeat(70) }).raidName.length, 60);
+  for (const bad of ["2026-02-30", "2026-13-01", "02/11/2026", "2026-11-2", "yesterday", 20261102, ""]) {
+    assert.equal(createRoom({ code: "X", raidDate: bad }).raidDate, null, String(bad));
+  }
+  assert.equal(createRoom({ code: "X", raidDate: "2028-02-29" }).raidDate, "2028-02-29", "a leap day is real");
+});
+
+test("only the host can set the raid details, and not after End Raid", () => {
+  const { room, ctx, host, as, m, run } = setup(["Ana", "Ben"]);
+  assert.match(act(room, as(m[1]), { type: "setRaidDetails", raidName: "Mine", raidDate: "2026-11-02" }, ctx).error, /Only the host/);
+  assert.equal(room.raidName, "");
+  run(host, { type: "setRaidDetails", raidName: " Sprint 43 ", raidDate: "2026-11-16" });
+  assert.deepEqual([room.raidName, room.raidDate], ["Sprint 43", "2026-11-16"]);
+  assert.match(act(room, host, { type: "setRaidDetails", raidName: "x".repeat(61) }, ctx).error, /too long/);
+  run(host, { type: "setRaidDetails", raidName: "", raidDate: "not a date" });
+  assert.deepEqual([room.raidName, room.raidDate], ["", null], "both can be cleared");
+  run(host, { type: "endRaid" });
+  assert.match(act(room, host, { type: "setRaidDetails", raidName: "Late" }, ctx).error, /read-only/);
+  assert.equal(room.raidName, "");
+});
+
+test("rooms saved before raid details load with none", () => {
+  const room = migrateRoom({ code: "OLDB", members: [], log: [] });
+  assert.equal(room.raidName, "");
+  assert.equal(room.raidDate, null);
+  assert.equal(migrateRoom({ code: "OLDC", raidDate: "2026-02-31", members: [], log: [] }).raidDate, null);
+});
+
+test("the Loot Ledger is headed with the raid title, date and room", () => {
+  const named = createRoom({ code: "XAB9", raidName: "Sprint 42 Retro", raidDate: "2026-11-02" });
+  assert.match(buildLedger(named), /^# Sprint 42 Retro\n\n2026-11-02 · Room XAB9\n/);
+  assert.match(buildLedger(createRoom({ code: "XAB9" })), /^# Raid XAB9\n\nRoom XAB9\n/);
 });
