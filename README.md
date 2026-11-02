@@ -32,9 +32,9 @@ Then open:
 
 During development, `npm run dev` restarts the server whenever you edit it.
 
-Both modes need to be served (by `npm start` or any static web server). Opening
-`index.html` straight from disk no longer works, because the game rules are
-shared ES modules and browsers don't load modules from `file://`.
+Both modes need to be served (by `npm start` or any static web server).
+Opening `index.html` straight from disk doesn't work, because the game rules
+are shared ES modules and browsers don't load modules from `file://`.
 
 ### Tests
 
@@ -49,10 +49,10 @@ different party sizes.
 `test/engine.test.js` covers whole flows: achievement and tactic rallies,
 merges, secret ballots, pull order and tiers, preparation and Engage, HP built
 from the plan (and following it mid-fight), the facilitator's rarity override,
-Tactical Victory,
-enrage timers, who counts towards bag size, bags shrinking below what someone
-holds, End Raid and the read-only room, the Raid Summary's totals and
-ordering, and migrating old saved rooms.
+Tactical Victory, enrage timers, who counts towards bag size, bags shrinking
+below what someone holds, End Raid and the read-only room, the Raid Summary's
+totals and ordering, Looking for Group and the Group Found countdown, raid
+names and dates, and migrating old saved rooms.
 
 ## Online mode
 
@@ -121,16 +121,35 @@ Once you're in a room, the header is a slim bar with a phase tracker under it:
 - **Your character** — your avatar, name and "Real name · Race Class" (plus
   "Facilitator" for the host). It opens a menu with **Loot Table**
   (facilitator), **Edit my character**, **Edit raid details** (facilitator),
-  **How to play** and **Leave group**.
+  **Sound effects** (see below), **How to play** and **Leave group**.
   Edit my character reopens the character screen, prefilled; your loot stays
   with you.
 - **Phase tracker** — LFG › Achievements › Scout › Threat › Bosses › Summary, with
   done phases ticked, the current one outlined, and a one-line hint for what
   to do now.
 
-On phones the bar collapses to the swords, the room chip (with an icon-only
-copy button), your avatar and a **Menu** button that holds everything else,
-and the tracker shows "Phase n of N" with a progress bar.
+On phones the bar collapses to the swords, the raid name and room code (with
+an icon-only copy button), your avatar and a **Menu** button that holds
+everything else, and the tracker shows "Phase n of N" with a progress bar.
+
+### Sound effects
+
+Four short sounds mark the big moments, on every screen in the room:
+
+| Moment | Sound |
+| --- | --- |
+| The host starts the raid (Group Found) | `InviteAccept.ogg` |
+| An achievement is posted, or rallies raise it to a new rarity | `Achievement.ogg` |
+| A boss is slain | `LevelUp.ogg` |
+| The raid ends | `QuestComplete.ogg` |
+
+Each achievement plays once when it's posted and once for each rarity it
+reaches through rallies; merges, and rallying back after an un-rally, are
+silent. Nobody hears sounds for things that happened before they arrived.
+Everything a sound marks also shows as a toast. **Sound effects** in the
+character menu turns them off (and stops one that's playing); the choice is
+kept in that browser. Single-screen mode has the same sounds, apart from
+Group Found.
 
 ### Saved and unsaved rooms
 
@@ -145,6 +164,12 @@ is not to save.**
 
 The header shows **Saved** or **Not saved**. Abandoned rooms (empty for
 24 hours) are pruned either way.
+
+Rooms and single-screen sessions saved by older versions load as they were
+and are brought up to date: characters of the removed High Order and
+Windshaper races move to the first race of their faction that can be their
+class, and bosses, tactics and phases saved before preparation, rallies or
+Looking for Group existed carry on where they left off.
 
 ### Playing with remote teammates
 
@@ -175,17 +200,17 @@ on their panel, and your own character has a star.
 If you drop out (a closed tab, a refresh, a flaky connection), your panel shows
 **Away** and you keep your place in the party. The character screen lists
 characters nobody is playing under **Returning? Reclaim your character**; click
-yours to carry on with your loot intact. **Leave Group** gives your slot up
+yours to carry on with your loot intact. **Leave group** gives your slot up
 instead.
 
 ## Local mode
 
 Local mode runs the **same page and the same game engine** in the browser, for
-a team around one screen. The header's room chip reads **Single screen**, and
-the character button shows whoever the screen is **acting as**. Its menu lists
-everyone at the table: pick a name to act as them (to post achievements, rally
-and vote), or **Add a party member**. **Edit my character** edits whoever
-you're acting as.
+a team around one screen. The header reads **Single screen** where the room
+code would be, and the character button shows whoever the screen is **acting
+as**. Its menu lists everyone at the table: pick a name to act as them (to
+post achievements, rally and vote), or **Add a party member**. **Edit my
+character** edits whoever you're acting as.
 
 - **Threat ballots stay private** by passing the screen around: each person
   selects their name, opens their ballot, votes, then hides it again.
@@ -201,8 +226,6 @@ you're acting as.
   tab closes. Tick **Keep after the tab closes** (in the character menu) to
   keep it in `localStorage` instead; the header then reads **Kept in this
   browser** rather than **This tab only**. **Disband group** wipes it.
-
-A session saved by the old local mode is migrated automatically.
 
 ## 1. Achievements
 
@@ -298,9 +321,6 @@ enrage timer and Tactical Victory are only available once the boss is engaged.
    picks Need / Greed / Pass. **Roll & Resolve** rolls and reveals. Tactics
    someone owns damage the boss; tactics everyone passes on deal no damage.
 
-Tactics in rooms saved before rallies existed keep the rarity they were
-proposed with; the facilitator can still override it.
-
 ### Damage
 
 Every owned tactic deals **40 damage plus a small bonus for its rarity**
@@ -344,9 +364,6 @@ None of these can kill the boss on their own; that takes owned tactics.
 - **Abandoned** — the raid was ended (End Raid) while the boss was still
   being fought or prepared. One abandoned in preparation shows "HP never set".
 
-A boss saved before preparation existed loads mid-fight, with its HP as it
-was.
-
 Then **Clear Stage** or pull the next boss. The optional **loot table** is a
 backlog you can drop items from with **Drop from Backlog** / **Pick from
 Backlog**; items someone already owns aren't offered again.
@@ -377,15 +394,16 @@ From four players up, the minimum of 3 means the bags add up to more than 10.
 **Party size** counts every slot someone holds, plus proxy slots the
 facilitator added for people who aren't online. That includes the facilitator
 when they have a character. A player whose connection drops still counts
-(their panel shows **Away**) until they click **Leave Group** or the
+(their panel shows **Away**) until they click **Leave group** or the
 facilitator kicks or removes them. Open slots don't count. In local mode,
 everyone at the table counts.
 
 Bag size is recalculated whenever someone joins, leaves or is removed. Every
-panel shows it as **Bags n/x**, and everyone gets a "Bag size changed" toast.
+panel shows it as **Bags n/x**, and everyone gets a "Bag size changed" toast
+(except during Looking for Group, where it would fire on every join).
 
 If bags shrink below what someone already holds, nothing is taken away. Their
-panel shows **Bags 5/3, over the limit**, with the extra bags outlined, and
+panel shows **Bags 5/3 — over the limit**, with the extra bags outlined, and
 they can't Need or Greed until they've completed enough tasks to get back
 under the limit.
 
@@ -409,10 +427,13 @@ can still view the summary, join late to see it, and export the Loot Ledger.
 If End Raid was clicked by mistake, the facilitator can **Reopen Raid** from
 the summary.
 
-The Raid Summary shows:
+The Raid Summary is headed with the raid name, then the date written out in
+full ("Monday 2 November 2026"), the number of heroes and the number of
+bosses pulled. It shows:
 
-1. **Party totals** — bosses slain, tactics owned, achievements earned and the
-   gold value of all owned loot. These are team totals only.
+1. **Party totals** — bosses slain, tactical victories, tactics owned,
+   achievements earned and the gold value of all owned loot. These are team
+   totals only.
 2. **Encounters** — every topic with its outcome (Slain, Tactical Victory,
    Enraged, Abandoned or Not pulled), the HP left if it wasn't slain, any
    Tactical Victory note, and its tactics with their rarity and owner
@@ -454,10 +475,13 @@ The download is named from both, e.g. `sprint-42-retro-2026-11-02.md`
 1. **Achievements** — Legendary first, with who posted and who rallied.
 2. **Each boss** — tier, HP, threat and status with its action count (e.g.
    "Slain, 3 of 4 actions open" or "Tactical Victory (60 of 250 HP left), 1
-   of 2 actions open"), then each action with its rarity (and any rarity
-   override), owner, who rallied and done state. Any Tactical Victory note is
-   shown under the boss.
-3. **Not pulled** — topics that were raised but never fought, with their threat.
+   of 2 actions open"), then each action as a checklist item (ticked when
+   done) with its rarity (and any rarity override), owner and who rallied.
+   Any Tactical Victory note is shown under the boss.
+3. **Not pulled** — topics that were raised but never fought, with their
+   threat and who raised them.
+4. **Other looted items** — backlog items someone owns that weren't one of a
+   boss's tactics.
 
 ## Tuning
 
@@ -474,8 +498,9 @@ engine and the browser:
 | `TACTIC_RALLY_UNCOMMON` … `TACTIC_RALLY_LEGENDARY` | 0.2, 0.4, 0.6, 0.8 | Share of other members needed to upgrade a tactic |
 | `TEAM_ACTION_BUDGET` | 10 | Open tasks shared across the party; bag size = budget ÷ party size, rounded up |
 | `MIN_BAG_SLOTS` | 3 | Smallest bag size, however big the party |
+| `RAID_START_SECONDS` | 5 | Length of the Group Found countdown |
 | `RACE_CLASSES`, `FACTION` | WoW: Forever | Legal race/class combinations |
-| `LIMITS` | | Maximum lengths for names, titles, descriptions and Tactical Victory notes |
+| `LIMITS` | | Maximum lengths for names (including the raid name), titles, descriptions and Tactical Victory notes |
 
 ## Races & classes (WoW: Forever)
 
@@ -484,10 +509,6 @@ Classic races, including Forever's six new combos (Human Hunter, Dwarf Shaman,
 Gnome Priest, Orc Mage, Troll Warlock, Undead Paladin). The engine rejects
 illegal combinations, so a tampered client can't create, say, a Night Elf
 Mage.
-
-The High Order and Windshaper races have been removed. A character saved with
-one moves to the first race of the same faction that can be their class (a
-High Order Mage becomes Human, a Windshaper Druid becomes Tauren).
 
 | Faction  | Race        | Classes |
 | -------- | ----------- | ------- |
@@ -509,15 +530,18 @@ The interface targets **WCAG 2.2 AA**:
   lighter than WoW's own colours so it meets 4.5:1 on every surface.
 - Toasts are read out by a polite live region and never move focus.
 - Everything works from the keyboard, with a visible focus ring. Dialogs keep
-  focus inside, close with Escape and return focus to what opened them.
-  Confirmations start on Cancel.
+  focus inside, close with Escape and return focus to what opened them
+  (except Group Found, which closes itself; see below). Confirmations start
+  on Cancel.
 - Focus is kept when other people's actions update the screen.
 - When the raid ends, focus moves to the Raid Summary heading (the screen it
   was on is gone). The summary uses a heading per section, boss and character,
   and shows status and rarity as text.
 - Animations (toasts, the health bar, pulses) are switched off when the system
   asks for reduced motion.
-- Timers can be paused or extended by the facilitator.
+- Phase and enrage timers can be paused or extended by the facilitator. The
+  5-second Group Found countdown can be skipped or cancelled by the
+  facilitator; nobody can act during it, so nothing is lost when it ends.
 - The lobby's controls are at least 44px tall, the room code has a visible
   label and hint, and connection status is written out, not just a coloured
   dot.
@@ -536,12 +560,15 @@ The interface targets **WCAG 2.2 AA**:
   joined the group."). The queue orb's pulse stops after under 5 seconds.
 - **Group Found** is a modal dialog: focus moves into it and stays there,
   the page behind it is inert, and focus goes back where it was when it
-  closes. Screen readers hear "Group found." when the countdown starts. Its
-  glow stops within 5 seconds, and the glow and progress bar don't animate
-  when the system asks for reduced motion.
-- When the host starts the raid, Group Found plays a short "invite accepted"
-  sound (under 3 seconds) once on each screen. It doesn't play for someone
-  who joins or reconnects partway through the countdown.
+  closes. It has no Escape, so it can't get out of step with the rest of the
+  room: it closes when the countdown ends or the facilitator enters now or
+  waits for more. Screen readers hear "Group found." when the countdown
+  starts. Its glow stops within 5 seconds, and the glow and progress bar
+  don't animate when the system asks for reduced motion.
+- [Sound effects](#sound-effects) never carry information on their own:
+  each one comes with a toast. Some run longer than 3 seconds, so
+  **Sound effects** in the character menu turns them off and stops one
+  that's already playing.
 
 ### Known gaps
 
@@ -552,12 +579,9 @@ These parts of the interface don't fully meet WCAG 2.2 AA yet:
   stops only when the encounter ends, or when the system asks for reduced
   motion. There is no on-page control to pause it.
 
-How this was checked: an axe-core scan (WCAG 2.2 A/AA rules plus best
-practices) of every screen, in both online and single-screen mode, at desktop
-and phone widths, with no violations found. Text contrast was also measured
-under the glyphs on every screen; the lowest is 5.18:1 against the 4.5:1
-minimum. The app has not yet been tested with a screen reader (VoiceOver,
-NVDA or JAWS), so issues only that kind of testing finds may remain.
+The screens have been checked with axe-core at desktop and phone widths, but
+not yet with a screen reader (VoiceOver, NVDA or JAWS), so issues only that
+kind of testing finds may remain.
 
 ## Files
 
@@ -567,6 +591,7 @@ NVDA or JAWS), so issues only that kind of testing finds may remain.
 - `shared/rules.js` — game rules and constants
 - `shared/engine.js` — the room engine: every state change, per-viewer views
   and the Loot Ledger
+- `shared/*.ogg` — the [sound effects](#sound-effects)
 - `server/server.js` — Express + ws server: connections, host role, slot
   claims, saving rooms and timers
 - `server/data/rooms.json` — saved rooms (auto-created, git-ignored)

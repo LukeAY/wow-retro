@@ -558,8 +558,8 @@ h1, h2, h3 {
   min-width: 300px;
   max-width: 420px;
   padding: 14px 20px 14px 16px;
-  background:
-    linear-gradient(90deg, rgba(0,0,0,.55), rgba(16,11,7,.94) 40%, rgba(16,11,7,.94));
+  /* solid, so the text keeps its contrast whatever the toast sits over */
+  background: linear-gradient(90deg, #060403, #100b07 40%, #100b07);
   border: 1px solid var(--toast-color);
   border-radius: 4px;
   box-shadow:

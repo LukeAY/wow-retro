@@ -17,7 +17,7 @@ import {
   RARITIES, RARITY, rarityRank, tacticDamage, BOSS_TIERS, tierForThreat, tierLabel, hpFromTactics, hpForDamage, BOSS_STATUS,
   THREAT_PER_PLAYER, validateThreatBallot, tallyThreat, nextBossByThreat,
   achievementRarity, tacticRarity, bagSize, bagsFull, slotsUsed, CHOICES, resolveRolls,
-  RACE_CLASSES, RACE_NAMES, CLASS_NAMES, FACTION, isValidCombo, RETIRED_RACES, replacementRace, LIMITS,
+  RACE_CLASSES, RACE_NAMES, CLASS_NAMES, FACTION, isValidCombo, RETIRED_RACES, replacementRace, LIMITS, RAID_START_SECONDS,
 } from "./rules.js";
 
 /* ---------------- Phases ---------------- */
@@ -30,9 +30,6 @@ export const PHASE_LABEL = {
   voting: "Threat Voting",
   encounters: "Boss Encounters",
 };
-
-// The Group Found countdown between Start the Raid and Achievements.
-export const RAID_START_SECONDS = 5;
 
 /* ---------------- Room shape ---------------- */
 
