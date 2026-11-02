@@ -539,6 +539,9 @@ The interface targets **WCAG 2.2 AA**:
   closes. Screen readers hear "Group found." when the countdown starts. Its
   glow stops within 5 seconds, and the glow and progress bar don't animate
   when the system asks for reduced motion.
+- When the host starts the raid, Group Found plays a short "invite accepted"
+  sound (under 3 seconds) once on each screen. It doesn't play for someone
+  who joins or reconnects partway through the countdown.
 
 ### Known gaps
 
