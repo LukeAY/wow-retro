@@ -496,6 +496,25 @@ The interface targets **WCAG 2.2 AA**:
   keyboard focus are kept clear of it.
 - Text sizes are in `rem`, so the self-hosted fonts follow browser text-size
   settings; the layout holds at 200% text size and at 320px wide.
+- The Looking for Group roster shows each player's status as text (Ready,
+  Away, Proxy, Open), not just colour, and new arrivals are read out ("Ana
+  joined the group."). The queue orb's pulse stops after under 5 seconds.
+
+### Known gaps
+
+These parts of the interface don't fully meet WCAG 2.2 AA yet:
+
+- **Boss threat glow (2.2.2 Pause, Stop, Hide, Level A).** While a boss is
+  active, its card pulses with a glow that repeats with no time limit. It
+  stops only when the encounter ends, or when the system asks for reduced
+  motion. There is no on-page control to pause it.
+
+How this was checked: an axe-core scan (WCAG 2.2 A/AA rules plus best
+practices) of every screen, in both online and single-screen mode, at desktop
+and phone widths, with no violations found. Text contrast was also measured
+under the glyphs on every screen; the lowest is 5.18:1 against the 4.5:1
+minimum. The app has not yet been tested with a screen reader (VoiceOver,
+NVDA or JAWS), so issues only that kind of testing finds may remain.
 
 ## Files
 

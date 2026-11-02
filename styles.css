@@ -1602,7 +1602,9 @@ textarea.field { width: 100%; resize: vertical; }
 }
 .lfg-queue-text .btn { margin-top: 6px; }
 
-/* the LFG "eye": a pulsing blue orb in a gilded ring, rippling outwards */
+/* the LFG "eye": a pulsing blue orb in a gilded ring, rippling outwards.
+   It runs two cycles (4.8s) and settles, so the motion stops within the
+   5 seconds WCAG 2.2.2 allows without a pause control. */
 .lfg-eye {
   position: relative;
   width: 72px; height: 72px;
@@ -1620,7 +1622,7 @@ textarea.field { width: 100%; resize: vertical; }
     radial-gradient(circle at 40% 30%, #6fc1ff, #1d5fb8 55%, #0a1f45 100%);
   box-shadow: 0 0 0 3px #b8913f, 0 0 0 4px #3a2a14, 0 0 0 5px #000,
     inset 0 -8px 14px rgba(0,0,0,.5), 0 0 18px -2px var(--rare);
-  animation: lfgPulse 2.4s ease-in-out infinite;
+  animation: lfgPulse 2.4s ease-in-out 2;
 }
 .lfg-ripple {
   position: absolute;
@@ -1628,9 +1630,9 @@ textarea.field { width: 100%; resize: vertical; }
   border-radius: 50%;
   border: 2px solid var(--rare);
   opacity: 0;
-  animation: lfgRipple 2.4s ease-out infinite;
+  animation: lfgRipple 2.4s ease-out 2;
 }
-.lfg-ripple + .lfg-ripple { animation-delay: 1.2s; }
+.lfg-ripple + .lfg-ripple { animation-delay: 1.2s; animation-iteration-count: 1; }
 @keyframes lfgPulse {
   0%, 100% { filter: brightness(1); box-shadow: 0 0 0 3px #b8913f, 0 0 0 4px #3a2a14, 0 0 0 5px #000, inset 0 -8px 14px rgba(0,0,0,.5), 0 0 14px -4px var(--rare); }
   50% { filter: brightness(1.25); box-shadow: 0 0 0 3px #b8913f, 0 0 0 4px #3a2a14, 0 0 0 5px #000, inset 0 -8px 14px rgba(0,0,0,.5), 0 0 28px 2px var(--rare); }
