@@ -77,10 +77,17 @@ The lobby puts joining first: most people arrive with a code or a link.
    and whether they're **Ready** (connected), **Away**, a **Proxy** or an
    **Open** slot. The facilitator also gets a **Copy invite link** button
    there. Nothing can be posted yet: no achievements, no Mob List topics.
-   Only the facilitator can leave LFG, with **Start the Raid**, which opens
-   Achievements for everyone. Anyone joining after that goes straight into
-   the current phase.
-5. The facilitator moves the session through its phases with **Back** /
+   Only the facilitator can leave LFG, with **Start the Raid**.
+5. **Start the Raid** shows **Group Found** on everyone's screen at once: the
+   party's portraits, the route ahead (Achievements › Scout › Threat › Bosses
+   › Summary) and a 5-second countdown. When it runs out, Achievements opens
+   for everyone. The facilitator can **Enter Now** to skip the rest of it, or
+   **Wait for More** to go back to the LFG queue; players see "The host is
+   opening the instance." Anyone who joins or reconnects mid-countdown sees
+   it with the time that's left. The room stays in LFG until the countdown
+   ends, so nothing can be posted during it. Anyone joining after that goes
+   straight into the current phase.
+6. The facilitator moves the session through its phases with **Back** /
    **Next** in the row under the phase tracker (with the optional phase timer).
    Everyone sees the current phase.
 
@@ -499,6 +506,11 @@ The interface targets **WCAG 2.2 AA**:
 - The Looking for Group roster shows each player's status as text (Ready,
   Away, Proxy, Open), not just colour, and new arrivals are read out ("Ana
   joined the group."). The queue orb's pulse stops after under 5 seconds.
+- **Group Found** is a modal dialog: focus moves into it and stays there,
+  the page behind it is inert, and focus goes back where it was when it
+  closes. Screen readers hear "Group found." when the countdown starts. Its
+  glow stops within 5 seconds, and the glow and progress bar don't animate
+  when the system asks for reduced motion.
 
 ### Known gaps
 
