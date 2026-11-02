@@ -724,3 +724,67 @@ test("local rooms and rooms saved before LFG don't start in Looking for Group", 
   assert.equal(migrateRoom({ code: "OLD6", members: [], log: [] }).phase, "achievements");
   assert.equal(migrateRoom({ code: "OLD7", phase: "scouting", members: [], log: [] }).phase, "scouting");
 });
+
+/* ---------------- Group Found countdown ---------------- */
+
+test("only the host can start the raid, and only from LFG with no countdown running", () => {
+  const { room, ctx, host, player } = lfgSetup();
+  assert.match(act(room, player, { type: "startRaid" }, ctx).error, /Only the host/);
+  assert.equal(room.raidStart, null);
+  assert.ok(act(room, host, { type: "startRaid" }, ctx).ok);
+  assert.equal(room.raidStart.durationMs, 5000);
+  assert.equal(room.phase, "lfg", "the room stays in LFG until the countdown ends");
+  assert.match(act(room, host, { type: "startRaid" }, ctx).error, /already starting/);
+  for (const type of ["enterNow", "cancelRaidStart"]) assert.match(act(room, player, { type }, ctx).error, /Only the host/);
+
+  const s = setup(["Ana"]); // a room that never had LFG
+  assert.match(act(s.room, s.host, { type: "startRaid" }, s.ctx).error, /already started/);
+});
+
+test("the countdown moves the room to Achievements once it runs out, and not before", () => {
+  const { room, ctx, host, player } = lfgSetup();
+  ctx.now = 1000;
+  act(room, host, { type: "startRaid" }, ctx);
+  assert.deepEqual(viewFor(room, player, 3000).raidStart, { remainingMs: 3000, durationMs: 5000, paused: false });
+  assert.equal(tick(room, 5999), false);
+  assert.equal(room.phase, "lfg");
+  assert.equal(tick(room, 6000), true);
+  assert.equal(room.phase, "achievements");
+  assert.equal(room.raidStart, null);
+  assert.equal(viewFor(room, player, 6000).raidStart, null);
+  assert.equal(tick(room, 7000), false);
+});
+
+test("Enter Now skips the countdown; Wait for More returns to the LFG queue", () => {
+  const a = lfgSetup();
+  assert.match(act(a.room, a.host, { type: "enterNow" }, a.ctx).error, /isn't starting/);
+  act(a.room, a.host, { type: "startRaid" }, a.ctx);
+  assert.ok(act(a.room, a.host, { type: "enterNow" }, a.ctx).ok);
+  assert.equal(a.room.phase, "achievements");
+  assert.equal(a.room.raidStart, null);
+
+  const b = lfgSetup();
+  act(b.room, b.host, { type: "startRaid" }, b.ctx);
+  assert.ok(act(b.room, b.host, { type: "cancelRaidStart" }, b.ctx).ok);
+  assert.equal(b.room.phase, "lfg");
+  assert.equal(b.room.raidStart, null);
+  assert.equal(tick(b.room, 60000), false, "a cancelled countdown never starts the raid");
+  assert.equal(b.room.phase, "lfg");
+  assert.ok(act(b.room, b.host, { type: "startRaid" }, b.ctx).ok, "the host can start again");
+});
+
+test("nothing can be posted during the countdown, and leaving LFG any other way ends it", () => {
+  const { room, ctx, host, player } = lfgSetup();
+  act(room, host, { type: "startRaid" }, ctx);
+  assert.match(act(room, player, { type: "postAchievement", title: "Too early" }, ctx).error, /closed/);
+  assert.match(act(room, player, { type: "addMob", name: "Too early" }, ctx).error, /hasn't opened/);
+  act(room, host, { type: "setPhase", phase: "achievements" }, ctx);
+  assert.equal(room.raidStart, null);
+});
+
+test("rooms saved without a countdown, or outside LFG, migrate with none", () => {
+  assert.equal(migrateRoom({ code: "OLD8", members: [], log: [] }).raidStart, null);
+  const stray = { durationMs: 5000, endsAt: 5000, remainingMs: 5000, paused: false };
+  assert.equal(migrateRoom({ code: "OLD9", phase: "scouting", raidStart: stray, members: [], log: [] }).raidStart, null);
+  assert.deepEqual(migrateRoom({ code: "OLDA", phase: "lfg", raidStart: stray, members: [], log: [] }).raidStart, stray);
+});

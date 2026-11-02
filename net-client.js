@@ -114,6 +114,7 @@ function showScreen(name) {
   $("#brand").classList.toggle("hidden", name === "lobby");
   for (const id of ["#room-chip", "#you-wrap"]) $(id).classList.toggle("hidden", name === "lobby");
   if (name === "lobby") { $("#bar-tools").classList.toggle("hidden", true); $("#phase-tracker").classList.toggle("hidden", true); setYouPanel(false); }
+  if (name !== "game" && !$("#group-found").classList.contains("hidden")) closeGroupFound();
 }
 
 function onState(msg) {
@@ -139,6 +140,7 @@ function onState(msg) {
   showScreen("game");
   renderTopbar(true);
   withFocusKept(render);
+  renderGroupFound();
   announceChanges();
 }
 
@@ -386,7 +388,9 @@ function formatClock(ms) {
 }
 
 function updateTimers() {
+  tickGroupFound();
   for (const [target, t] of Object.entries(timers)) {
+    if (target === "raidStart") continue;
     const left = t.paused ? t.remainingMs : Math.max(0, t.deadline - performance.now());
     const label = target === "enrage" ? "until enrage" : "left";
     const text = t.paused ? `Paused, ${formatClock(left)} ${label}` : left > 0 ? `${formatClock(left)} ${label}` : (target === "enrage" ? "Enraging…" : "Time's up");
@@ -401,6 +405,71 @@ function updateTimers() {
   }
 }
 setInterval(() => { if (view) updateTimers(); }, 1000);
+
+/* ----- Group Found (online only) ----- */
+// Start the Raid opens a short countdown that everyone sees at once. The room
+// stays in LFG until it runs out, or the host enters now or waits for more.
+
+const ROUTE = [...PHASES.filter((p) => p !== "lfg"), "summary"];
+let gfReturn = null; // what had focus before Group Found opened
+
+function renderGroupFound() {
+  const t = view.raidStart;
+  if (t) timers.raidStart = { deadline: performance.now() + t.remainingMs, paused: t.paused, remainingMs: t.remainingMs, durationMs: t.durationMs };
+  else delete timers.raidStart;
+  const overlay = $("#group-found");
+  const wasOpen = !overlay.classList.contains("hidden");
+  if (!t || view.ended) {
+    if (wasOpen) closeGroupFound();
+    return;
+  }
+  const host = isHost();
+  setText($("#gf-sub"), `Your party is assembled in room ${view.room}.`);
+  // everyone holding a place in the party: not the open slots nobody holds
+  const party = view.members.filter((m) => lfgTag(m)[0] !== "open");
+  setHtml($("#gf-party"), party.map((m) => `<li class="gf-hero" style="--member-color:${CLASS_COLORS[m.cls] || "#c8aa6e"}">
+      <span class="gf-portrait">
+        <span class="member-avatar" aria-hidden="true">${raceIcon(m.race) || escapeHtml(m.name.slice(0, 2).toUpperCase())}</span>
+        <span class="gf-ready" aria-hidden="true">${icon("check")}</span>
+      </span>
+      <span class="gf-name">${escapeHtml(m.name)}</span>
+      <span class="gf-class">${escapeHtml(`${m.race} ${m.cls}`)}</span>
+    </li>`).join(""));
+  setHtml($("#gf-route"), ROUTE.map((p, i) => `<li class="gf-step${i === 0 ? " next" : ""}">${TRACK_LABEL[p]}</li>`).join(""));
+  $("#gf-actions").classList.toggle("hidden", !host);
+  $("#gf-wait").classList.toggle("hidden", host);
+  if (wasOpen) { updateTimers(); return; }
+
+  closeModals(); // any other dialog gives way
+  setYouPanel(false);
+  gfReturn = document.activeElement;
+  overlay.classList.remove("hidden");
+  for (const id of ["#topbar", "#main-content"]) $(id).inert = true;
+  // start the bar where the countdown is, without sliding there
+  const fill = $("#gf-bar-fill");
+  fill.style.transition = "none";
+  updateTimers();
+  void fill.offsetWidth;
+  fill.style.transition = "";
+  $("#group-found .gf-panel").focus();
+}
+
+function closeGroupFound() {
+  $("#group-found").classList.add("hidden");
+  for (const id of ["#topbar", "#main-content"]) $(id).inert = false;
+  if (gfReturn && document.contains(gfReturn) && gfReturn.offsetParent !== null) gfReturn.focus();
+  gfReturn = null;
+}
+
+// Called from updateTimers: the bar and "open in N…" tick down locally.
+function tickGroupFound() {
+  const t = timers.raidStart;
+  if (!t || $("#group-found").classList.contains("hidden")) return;
+  const left = Math.max(0, t.deadline - performance.now());
+  const n = Math.ceil(left / 1000);
+  setText($("#gf-count"), n > 0 ? `First up: Achievements open in ${n}…` : "First up: Achievements are opening…");
+  $("#gf-bar-fill").style.width = `${(left / t.durationMs) * 100}%`;
+}
 
 /* ----- Looking for Group (online only) ----- */
 // A holding page while the party gathers: who's here, live, and (for the
@@ -1120,6 +1189,10 @@ function announceChanges() {
     toast({ kind: "neutral", iconName: "lootbag", heading: "Bag size changed", title: `Bags now hold ${view.bagSize}`,
       lines: [`Party of ${view.partySize}: ${TEAM_ACTION_BUDGET} actions shared, at least ${MIN_BAG_SLOTS} each.`], life: 4500 });
   }
+  if (!prev.raidStart && view.raidStart) announce("Group found.");
+  if (prev.raidStart && !view.raidStart && view.phase === "lfg") {
+    toast({ kind: "neutral", iconName: "person", heading: "The host is waiting for more players", life: 3500 });
+  }
   if (prev.phase === "lfg" && view.phase !== "lfg") {
     toast({ kind: "epic", iconName: "swords", heading: "The raid has begun!", title: PHASE_LABEL[view.phase], life: 5000 });
   } else if (prev.phase !== view.phase) {
@@ -1312,6 +1385,17 @@ document.addEventListener("keydown", (e) => {
   const first = items[0], last = items[items.length - 1];
   if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
   else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+});
+
+// Group Found keeps focus inside it. It has no Escape: it closes when the
+// countdown ends, or when the host enters now or waits for more.
+document.addEventListener("keydown", (e) => {
+  const panel = $("#group-found .gf-panel");
+  if (e.key !== "Tab" || $("#group-found").classList.contains("hidden")) return;
+  const items = [panel, ...focusables(panel)];
+  const at = items.indexOf(document.activeElement);
+  e.preventDefault();
+  items[(at + (e.shiftKey ? items.length - 1 : 1)) % items.length].focus();
 });
 
 let confirmResolver = null;
@@ -1598,7 +1682,13 @@ $("#btn-cancel-char").addEventListener("click", () => {
 });
 for (const id of ["#char-name", "#char-realname"]) $(id).addEventListener("keydown", (e) => { if (e.key === "Enter") submitCharacter(); });
 
-$("#btn-phase-next").addEventListener("click", () => send({ type: "setPhase", phase: PHASES[PHASES.indexOf(view.phase) + 1] }));
+$("#btn-phase-next").addEventListener("click", () => {
+  // from LFG, Start the Raid opens the Group Found countdown instead
+  if (view.phase === "lfg") send({ type: "startRaid" });
+  else send({ type: "setPhase", phase: PHASES[PHASES.indexOf(view.phase) + 1] });
+});
+$("#btn-enter-now").addEventListener("click", () => send({ type: "enterNow" }));
+$("#btn-wait-more").addEventListener("click", () => send({ type: "cancelRaidStart" }));
 $("#btn-end-raid").addEventListener("click", async () => {
   if (await confirmDialog("End the raid? Everyone moves to the Raid Summary and the room becomes read-only. A boss still being fought is abandoned.", "End Raid")) {
     send({ type: "endRaid" });

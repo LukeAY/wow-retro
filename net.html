@@ -458,7 +458,7 @@
       </div>
       <p>Loot Council runs a team retro like a dungeon. The facilitator creates a room and shares the code; everyone else joins on their own laptop and makes a character.</p>
       <ol class="howto-steps">
-        <li><b>Looking for Group.</b> Wait while the party gathers: everyone appears as they join. The facilitator starts the raid once everyone's here. (Single-screen mode skips this step.)</li>
+        <li><b>Looking for Group.</b> Wait while the party gathers: everyone appears as they join. When the facilitator starts the raid, everyone sees <b>Group Found</b> with a 5-second countdown into Achievements; the facilitator can enter now or wait for more. (Single-screen mode skips this step.)</li>
         <li><b>Achievements.</b> Post what went well, and rally behind each other's wins to raise their rarity.</li>
         <li><b>Scouting.</b> Add the problems you want to talk about to the Mob List.</li>
         <li><b>Threat Voting.</b> Spread 3 threat across the topics, in secret. The most threatening become bosses.</li>
@@ -497,6 +497,26 @@
   </div>
 
   <!-- Visual toasts are decorative; the announcer reads them out politely -->
+  <!-- Group Found: the countdown between Start the Raid and Achievements, on everyone's screen -->
+  <div id="group-found" class="gf-overlay hidden">
+    <div class="gf-panel" role="dialog" aria-modal="true" aria-labelledby="gf-title" aria-describedby="gf-sub" tabindex="-1">
+      <div class="gf-orb" aria-hidden="true"><span data-icon="check"></span></div>
+      <h2 id="gf-title" class="gf-title">Group Found</h2>
+      <p id="gf-sub" class="gf-sub"></p>
+      <ul id="gf-party" class="gf-party" aria-label="Your party"></ul>
+      <div class="gf-divider" aria-hidden="true"></div>
+      <h3 id="gf-route-title" class="gf-route-title">The Route Ahead</h3>
+      <ol id="gf-route" class="gf-route" aria-labelledby="gf-route-title"></ol>
+      <div class="gf-bar" aria-hidden="true"><span id="gf-bar-fill" class="gf-bar-fill"></span></div>
+      <p id="gf-count" class="gf-count" role="timer"></p>
+      <div id="gf-actions" class="gf-actions hidden">
+        <button id="btn-enter-now" class="btn btn-primary">Enter Now</button>
+        <button id="btn-wait-more" class="btn btn-ghost">Wait for More</button>
+      </div>
+      <p id="gf-wait" class="gf-wait hidden">The host is opening the instance.</p>
+    </div>
+  </div>
+
   <div id="toast-stack" class="toast-stack" aria-hidden="true"></div>
   <div id="announcer" class="sr-only" aria-live="polite" aria-atomic="true"></div>
 

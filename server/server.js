@@ -317,11 +317,12 @@ function detach(client) {
 
 /* ---------------- Timers and stale-room cleanup ---------------- */
 
-// Enrage timers are checked every second; a boss whose timer ran out enrages.
+// Timers are checked four times a second: a Group Found countdown that ran
+// out starts the raid on time, and a boss whose enrage ran out enrages.
 setInterval(() => {
   const now = Date.now();
   for (const room of rooms.values()) if (tick(room, now)) broadcast(room);
-}, 1000).unref();
+}, 250).unref();
 
 const ROOM_TTL_MS = 24 * 60 * 60 * 1000; // keep abandoned rooms for 24h
 function pruneStaleRooms() {

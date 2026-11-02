@@ -31,6 +31,9 @@ export const PHASE_LABEL = {
   encounters: "Boss Encounters",
 };
 
+// The Group Found countdown between Start the Raid and Achievements.
+export const RAID_START_SECONDS = 5;
+
 /* ---------------- Room shape ---------------- */
 
 export function createRoom({ code, persist = false, tacticRallies = true, lfg = false, now = Date.now() }) {
@@ -40,6 +43,7 @@ export function createRoom({ code, persist = false, tacticRallies = true, lfg = 
     tacticRallies,           // false in local mode: one screen picks rarity instead
     phase: lfg ? "lfg" : "achievements", // online rooms gather in LFG first
     phaseTimer: null,        // optional countdown for the current phase
+    raidStart: null,         // Group Found countdown from LFG into Achievements
     members: [],             // [{ id, name, realName, cls, race, proxy, held }]
     achievements: [],        // [{ id, title, detail, posters[], rallies[], rarity }]
     mobList: [],             // topics waiting to be pulled
@@ -102,6 +106,7 @@ export function migrateRoom(saved) {
   room.log = (saved.log || []).map(({ stepId, ...t }) => ({ ...t, tacticId: t.tacticId || stepId || null }));
   if (typeof saved.tacticRallies !== "boolean") room.tacticRallies = true;
   if (!saved.phase) room.phase = (room.boss || room.bossLog.length) ? "encounters" : "achievements";
+  if (room.phase !== "lfg" || !saved.raidStart) room.raidStart = null;
   return room;
 }
 
@@ -122,7 +127,7 @@ function migrateTactics(boss) {
 // remainingMs is authoritative; while running, endsAt is.
 
 function makeTimer(minutes, now) {
-  const ms = minutes * 60000;
+  const ms = Math.round(minutes * 60000);
   return { durationMs: ms, endsAt: now + ms, remainingMs: ms, paused: false };
 }
 
@@ -263,6 +268,13 @@ function endEncounter(room, status) {
   room.boss.enrage = null;
 }
 
+// The Group Found countdown: once it runs out, the raid starts.
+function checkRaidStart(room, now) {
+  if (!room.raidStart || room.ended || timerRemaining(room.raidStart, now) > 0) return false;
+  changePhase(room, "achievements");
+  return true;
+}
+
 // An enrage that ran out mid-vote waits for that drop to be resolved.
 function checkEnrage(room, now) {
   const boss = room.boss;
@@ -362,10 +374,32 @@ const actions = {
     if (!actor.facilitator) return err("Only the host can change the phase.");
     if (!PHASES.includes(msg.phase)) return err("Unknown phase.");
     if (msg.phase === room.phase) return OK;
-    // moving on to the fight reveals any threat that hasn't been revealed yet
-    if (msg.phase === "encounters" && !room.threat.revealed) revealThreat(room);
-    room.phase = msg.phase;
-    room.phaseTimer = null;
+    changePhase(room, msg.phase);
+    return OK;
+  },
+
+  // Start the Raid from LFG: a short Group Found countdown everyone sees,
+  // then Achievements (see tick). The room stays in LFG until it runs out.
+  startRaid(room, actor, msg, ctx) {
+    if (!actor.facilitator) return err("Only the host can start the raid.");
+    if (room.phase !== "lfg") return err("The raid has already started.");
+    if (room.raidStart) return err("The raid is already starting.");
+    room.raidStart = makeTimer(RAID_START_SECONDS / 60, ctx.now);
+    return OK;
+  },
+
+  // Skip the rest of the countdown.
+  enterNow(room, actor) {
+    if (!actor.facilitator) return err("Only the host can start the raid.");
+    if (!room.raidStart) return err("The raid isn't starting.");
+    changePhase(room, "achievements");
+    return OK;
+  },
+
+  // Wait for More: back to the LFG queue.
+  cancelRaidStart(room, actor) {
+    if (!actor.facilitator) return err("Only the host can start the raid.");
+    room.raidStart = null;
     return OK;
   },
 
@@ -742,6 +776,7 @@ const actions = {
       endEncounter(room, "abandoned");
     }
     room.phaseTimer = null;
+    room.raidStart = null;
     room.ended = { at: ctx.now };
     return OK;
   },
@@ -826,6 +861,14 @@ function resolveDrop(room, ctx) {
   }
 }
 
+function changePhase(room, phase) {
+  // moving on to the fight reveals any threat that hasn't been revealed yet
+  if (phase === "encounters" && !room.threat.revealed) revealThreat(room);
+  room.phase = phase;
+  room.phaseTimer = null;
+  room.raidStart = null; // leaving LFG by any route ends the Group Found countdown
+}
+
 // Once the raid has ended, only reopening it is allowed.
 const AFTER_THE_END = new Set(["endRaid", "reopenRaid"]);
 
@@ -842,9 +885,10 @@ export function hasAction(type) {
   return Object.prototype.hasOwnProperty.call(actions, type);
 }
 
-// Run timers. Returns true if the room changed (a boss enraged).
+// Run timers. Returns true if the room changed (the raid started, or a boss enraged).
 export function tick(room, now) {
-  return checkEnrage(room, now);
+  const started = checkRaidStart(room, now);
+  return checkEnrage(room, now) || started;
 }
 
 /* ---------------- Views (what each viewer may see) ---------------- */
@@ -874,6 +918,7 @@ export function viewFor(room, viewer, now, { revealChoices = false } = {}) {
     persist: room.persist,
     phase: room.phase,
     phaseTimer: timerView(room.phaseTimer, now),
+    raidStart: timerView(room.raidStart, now),
     you: {
       memberId: viewer.memberId,
       facilitator: !!viewer.facilitator,
