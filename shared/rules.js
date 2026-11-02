@@ -5,6 +5,11 @@
  * network, storage or the DOM. Randomness is passed in, so tests can pin it.
  * ========================================================================= */
 
+/* ---------------- Starting the raid ---------------- */
+
+// Group Found: the countdown between Start the Raid and Achievements.
+export const RAID_START_SECONDS = 5;
+
 /* ---------------- Rarity = priority = value ---------------- */
 
 export const RARITIES = ["poor", "common", "uncommon", "rare", "epic", "legendary"];

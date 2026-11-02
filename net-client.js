@@ -420,15 +420,6 @@ setInterval(() => { if (view) updateTimers(); }, 1000);
 const ROUTE = [...PHASES.filter((p) => p !== "lfg"), "summary"];
 let gfReturn = null; // what had focus before Group Found opened
 
-// Played once each time the host starts the raid. Browsers only allow sound
-// after the viewer has interacted with the page, so a refused play is ignored.
-const inviteAccept = new Audio("shared/InviteAccept.ogg");
-inviteAccept.preload = "auto";
-function playInviteAccept() {
-  inviteAccept.currentTime = 0;
-  inviteAccept.play().catch(() => {});
-}
-
 function renderGroupFound() {
   const t = view.raidStart;
   if (t) timers.raidStart = { deadline: performance.now() + t.remainingMs, paused: t.paused, remainingMs: t.remainingMs, durationMs: t.durationMs };
@@ -458,7 +449,7 @@ function renderGroupFound() {
 
   // Only when this screen saw the countdown start (Start the Raid), not when
   // someone joins or reconnects partway through one.
-  if (prevView && !prevView.raidStart) playInviteAccept();
+  if (prevView && !prevView.raidStart) playSound("groupFound");
   closeModals(); // any other dialog gives way
   setYouPanel(false);
   gfReturn = document.activeElement;
@@ -1148,6 +1139,43 @@ function submitCharacter() {
   $("#char-name").value = ""; $("#char-realname").value = "";
 }
 
+/* ---------------- Sound effects ---------------- */
+// Short cues for the big moments, on by default. Some run longer than 3
+// seconds, so the menu has a switch to turn them off (WCAG 1.4.2), kept per
+// browser. Browsers only allow sound once the viewer has interacted with the
+// page, so a refused play is ignored.
+
+const SOUND_FILES = {
+  groupFound: "shared/InviteAccept.ogg",  // the host starts the raid
+  achievement: "shared/Achievement.ogg",  // posted, or upgraded by rallies
+  bossSlain: "shared/LevelUp.ogg",
+  raidEnded: "shared/QuestComplete.ogg",
+};
+const sounds = Object.fromEntries(Object.entries(SOUND_FILES).map(([name, src]) => {
+  const audio = new Audio(src);
+  audio.preload = "auto";
+  return [name, audio];
+}));
+const SOUND_KEY = "wow-retro-sound";
+let soundOn = true;
+try { soundOn = localStorage.getItem(SOUND_KEY) !== "off"; } catch { /* on */ }
+
+function playSound(name) {
+  if (!soundOn) return;
+  sounds[name].currentTime = 0;
+  sounds[name].play().catch(() => {});
+}
+function setSoundOn(on) {
+  soundOn = on;
+  try { localStorage.setItem(SOUND_KEY, on ? "on" : "off"); } catch { /* not remembered */ }
+  if (!on) for (const audio of Object.values(sounds)) audio.pause(); // stops one already playing
+}
+
+// The highest rarity each achievement has had its sound for, so it plays
+// once when posted and once per rarity reached through rallies, but not
+// again when someone un-rallies and rallies back.
+const achievementHeard = new Map(); // id -> rarity rank
+
 /* ---------------- Toasts and announcements ---------------- */
 
 // Visual toasts are aria-hidden; this polite live region reads them out
@@ -1195,6 +1223,7 @@ function announceChanges() {
   if (!prev) return;
   if (!prev.ended && view.ended) {
     toast({ kind: "neutral", iconName: "trophy", heading: "The raid has ended", title: "Raid Summary", life: 5000 });
+    playSound("raidEnded");
     $("#summary-title").focus(); // the screen it was on is gone
     return;
   }
@@ -1223,15 +1252,26 @@ function announceChanges() {
       if (m.id !== view.you.memberId && !prev.members.some((x) => x.id === m.id)) announce(`${m.name} joined the group.`);
     }
   }
+  // achievements already on the board when this screen arrived: no sound
+  for (const a of prev.achievements) if (!achievementHeard.has(a.id)) achievementHeard.set(a.id, rarityRank(a.rarity));
+  // a merge removes one achievement and can raise another: that's not a rally
+  const merged = prev.achievements.some((x) => !view.achievements.some((a) => a.id === x.id));
+  let achievementSound = false;
   for (const a of view.achievements) {
     const before = prev.achievements.find((x) => x.id === a.id);
     const by = a.posters.map((p) => p.name).join(", ");
+    const rank = rarityRank(a.rarity);
+    const heard = achievementHeard.get(a.id) ?? -1;
     if (!before) {
       toast({ kind: a.rarity, iconName: "trophy", heading: "Achievement Earned", title: `[${a.title}]`, lines: [`<span class="rarity-label">${RARITY[a.rarity].label}</span> posted by ${escapeHtml(by)}`] });
-    } else if (rarityRank(a.rarity) > rarityRank(before.rarity)) {
+      if (!achievementHeard.has(a.id)) achievementSound = true;
+    } else if (rank > rarityRank(before.rarity)) {
       toast({ kind: a.rarity, iconName: "trophy", heading: `Achievement upgraded to ${RARITY[a.rarity].label}!`, title: `[${a.title}]`, life: 6000 });
+      if (!merged && rank > heard) achievementSound = true;
     }
+    achievementHeard.set(a.id, Math.max(rank, heard));
   }
+  if (achievementSound) playSound("achievement"); // once, however many changed
   if (view.boss && prev.boss && view.boss.id === prev.boss.id) {
     for (const t of view.boss.tactics) {
       const before = prev.boss.tactics.find((x) => x.id === t.id);
@@ -1264,6 +1304,7 @@ function announceChanges() {
   if (boss && before && before.id === boss.id && before.status === "active" && boss.status !== "active") {
     const looted = view.log.filter((t) => t.bossId === boss.id && !t.passedOver).length;
     if (boss.status === "slain") {
+      playSound("bossSlain");
       toast({ kind: "legendary", iconName: "swords", heading: "Boss slain:", title: `[${boss.name}]`, lines: [`${plural(looted, "item", "items")} looted. Victory!`], life: 6500 });
     } else if (boss.status === "tactical") {
       // a soft win: blue and a banner, where a full kill is orange and swords
@@ -1750,6 +1791,8 @@ function startEditCharacter() {
   $("#char-name").focus();
 }
 $("#keep-session").addEventListener("change", (e) => transport.setKeep(e.target.checked));
+$("#sound-on").checked = soundOn;
+$("#sound-on").addEventListener("change", (e) => setSoundOn(e.target.checked));
 
 $("#btn-create-char").addEventListener("click", submitCharacter);
 $("#btn-cancel-char").addEventListener("click", () => {
