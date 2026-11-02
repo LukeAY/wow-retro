@@ -11,6 +11,7 @@ import {
   RALLY_EPIC, RALLY_LEGENDARY, TEAM_ACTION_BUDGET, MIN_BAG_SLOTS, TACTIC_RALLY_UNCOMMON, TACTIC_RALLY_LEGENDARY, RACE_CLASSES, FACTION, CLASS_NAMES, BOSS_TIERS, tierForThreat,
 } from "./shared/rules.js";
 import { PHASES as ALL_PHASES, PHASE_LABEL } from "./shared/engine.js";
+import { LIMITS } from "./shared/rules.js";
 import { icon, svgIcon, ICON_PATHS, raceIcon, classIcon, factionIcon } from "./icons.js";
 
 const LOCAL = new URLSearchParams(location.search).get("mode") === "local";
@@ -226,6 +227,11 @@ function renderTopbar(inGame) {
   // room chip: the code and (for the host) the invite link; local mode has neither
   $("#room-chip").classList.toggle("local", LOCAL);
   setText($("#room-code"), LOCAL ? "Single screen" : view.room);
+  setText($("#raid-title"), view.raidTitle);
+  $("#raid-title").title = view.raidTitle; // the full title when it's cut short
+  const date = formatDate(view.raidDate);
+  setText($("#raid-date"), date);
+  for (const id of ["#raid-date", "#raid-date-sep"]) $(id).classList.toggle("hidden", !date);
   $("#btn-copy-invite").classList.toggle("hidden", LOCAL || !host);
 
   // status stack: plain text, the dot is extra
@@ -243,6 +249,7 @@ function renderTopbar(inGame) {
     roster: inGame && host && !(ended && LOCAL), // online the host can still kick or hand over after the end
     export: inGame,
     config: inGame && !ended && host,
+    raid: inGame && !ended && host,
   };
   $("#btn-mobs").classList.toggle("hidden", !tools.mobs);
   $("#btn-roster").classList.toggle("hidden", !tools.roster);
@@ -424,7 +431,7 @@ function renderGroupFound() {
     return;
   }
   const host = isHost();
-  setText($("#gf-sub"), `Your party is assembled in room ${view.room}.`);
+  setText($("#gf-sub"), `Your party for ${view.raidTitle} is assembled.`);
   // everyone holding a place in the party: not the open slots nobody holds
   const party = view.members.filter((m) => lfgTag(m)[0] !== "open");
   setHtml($("#gf-party"), party.map((m) => `<li class="gf-hero" style="--member-color:${CLASS_COLORS[m.cls] || "#c8aa6e"}">
@@ -481,7 +488,8 @@ const lfgTag = (m) => m.claimed && m.connected ? ["ready", "Ready"]
 function renderLfg() {
   const host = isHost();
   const ready = view.members.filter((m) => m.claimed && m.connected);
-  setText($("#lfg-count"), `${plural(ready.length, "hero", "heroes")} ready`);
+  setText($("#lfg-raid-title"), view.raidTitle);
+  setText($("#lfg-meta"), [formatDate(view.raidDate), `${plural(ready.length, "hero", "heroes")} ready`].filter(Boolean).join(" · "));
   setText($("#lfg-status"), host ? "Your party is forming" : "Waiting for the raid to start…");
   setText($("#lfg-sub"), host
     ? `Share the invite link or room code ${view.room}. Start the Raid when everyone's here.`
@@ -1267,6 +1275,9 @@ const names = (list) => list.map(whoText).join(", ");
 function renderSummary() {
   const sum = view.summary;
   const host = isHost();
+  setText($("#summary-raid-title"), view.raidTitle);
+  setText($("#summary-meta"), [formatDate(view.raidDate, true), plural(sum.characters.length, "hero", "heroes"),
+    plural(sum.encounters.filter((e) => e.pulled).length, "boss", "bosses")].filter(Boolean).join(" · "));
   $("#btn-reopen-raid").classList.toggle("hidden", !host);
   const note = $("#summary-unsaved");
   note.classList.toggle("hidden", !!view.persist);
@@ -1414,6 +1425,8 @@ function confirmDialog(text, yesLabel = "Confirm", { withNote = false } = {}) {
 }
 
 function refreshOpenModals() {
+  // the details lock when the raid ends (and only the host edits them)
+  if (!$("#modal-raid").classList.contains("hidden") && (view.ended || !isHost())) closeModals();
   if (!$("#modal-config").classList.contains("hidden")) renderLootTableModal();
   if (!$("#modal-roster").classList.contains("hidden")) renderRosterModal();
   if (!$("#modal-manual").classList.contains("hidden")) renderManualDropModal();
@@ -1467,9 +1480,48 @@ function renderManualDropModal() {
 /* ---------------- Loot Ledger ---------------- */
 
 function showLedger(text) {
-  $("#ledger-text").value = text;
+  // the engine writes the date under the title as YYYY-MM-DD: show it UK style
+  $("#ledger-text").value = text.replace(/^(# [^\n]*\n\n)(\d{4}-\d{2}-\d{2})(?= · )/, (_, head, iso) => head + formatDate(iso));
   $("#ledger-status").textContent = "";
   openModal("#modal-ledger");
+}
+
+/* ---------------- Raid details ---------------- */
+// The engine keeps the retro date as "YYYY-MM-DD"; it's only formatted here,
+// UK style: "Mon 2 Nov 2026", or "Monday 2 November 2026" on the summary.
+
+const SHORT_DATE = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+const LONG_DATE = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+function formatDate(iso, long = false) {
+  if (!iso) return "";
+  const [y, m, d] = iso.split("-").map(Number);
+  return (long ? LONG_DATE : SHORT_DATE).format(new Date(y, m - 1, d)).replace(/,/g, "");
+}
+// today in the browser's own time zone, not UTC
+function todayIso() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// The written-out date under a date input, and the name's character count.
+function syncRaidFields() {
+  for (const id of ["#create-raid-date", "#edit-raid-date"]) setText($(`${id}-text`), formatDate($(id).value));
+  setText($("#edit-raid-count"), `${$("#edit-raid-name").value.length} / ${LIMITS.raidName}`);
+}
+
+function openRaidDetails() {
+  $("#edit-raid-name").value = view.raidName;
+  $("#edit-raid-date").value = view.raidDate || "";
+  syncRaidFields();
+  openModal("#modal-raid");
+  $("#edit-raid-name").focus();
+}
+
+// A file name from the title and date: sprint-42-retro-2026-11-02.md
+function ledgerFileName() {
+  const slug = view.raidTitle.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60).replace(/-+$/, "");
+  return `${[slug || view.room.toLowerCase(), view.raidDate].filter(Boolean).join("-")}.md`;
 }
 
 /* ---------------- Helpers ---------------- */
@@ -1524,8 +1576,22 @@ persistHint();
 
 $("#btn-create").addEventListener("click", () => {
   $("#lobby-error").textContent = "";
-  send({ type: "create", persist: $("#create-persist").checked });
+  send({ type: "create", persist: $("#create-persist").checked,
+    raidName: $("#create-raid-name").value, raidDate: $("#create-raid-date").value || null });
 });
+
+// Raid details, in the lobby and the host's Edit raid details dialog
+$("#create-raid-date").value = todayIso();
+for (const id of ["#create-raid-date", "#edit-raid-date", "#edit-raid-name"]) $(id).addEventListener("input", syncRaidFields);
+for (const b of $$("[data-today]")) {
+  b.addEventListener("click", () => { $(b.dataset.today).value = todayIso(); syncRaidFields(); });
+}
+syncRaidFields();
+$("#btn-raid-save").addEventListener("click", () => {
+  send({ type: "setRaidDetails", raidName: $("#edit-raid-name").value, raidDate: $("#edit-raid-date").value || null });
+  closeModals();
+});
+$("#edit-raid-name").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#btn-raid-save").click(); });
 
 // Room code: uppercase A–Z / 0–9 only, four characters, whatever was typed or pasted.
 function syncJoinCode() {
@@ -1657,6 +1723,7 @@ $("#you-panel").addEventListener("click", (e) => {
   visibleTrigger().focus();
   if (tool === "leave") leaveGroup();
   else if (tool === "edit") startEditCharacter();
+  else if (tool === "raid") openRaidDetails();
   else if (tool === "export") send({ type: "ledger" });
   else openModal({ mobs: "#modal-mobs", roster: "#modal-roster", config: "#modal-config", howto: "#modal-howto" }[tool]);
 });
@@ -1763,9 +1830,10 @@ $("#btn-copy-ledger").addEventListener("click", async () => {
 $("#btn-download-ledger").addEventListener("click", () => {
   const blob = new Blob([$("#ledger-text").value], { type: "text/markdown" });
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob); a.download = "loot-ledger.md"; a.click();
+  const name = ledgerFileName();
+  a.href = URL.createObjectURL(blob); a.download = name; a.click();
   URL.revokeObjectURL(a.href);
-  $("#ledger-status").textContent = "Downloaded loot-ledger.md.";
+  $("#ledger-status").textContent = `Downloaded ${name}.`;
 });
 
 $("#btn-add-loot").addEventListener("click", () => {

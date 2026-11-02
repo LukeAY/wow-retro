@@ -36,9 +36,11 @@ export const RAID_START_SECONDS = 5;
 
 /* ---------------- Room shape ---------------- */
 
-export function createRoom({ code, persist = false, tacticRallies = true, lfg = false, now = Date.now() }) {
+export function createRoom({ code, persist = false, tacticRallies = true, lfg = false, raidName = "", raidDate = null, now = Date.now() }) {
   return {
     code,
+    raidName: cleanRaidName(raidName), // optional; see raidTitle for the fallback
+    raidDate: cleanRaidDate(raidDate), // optional "YYYY-MM-DD", formatted only by the client
     persist,                 // saved rooms survive a server restart
     tacticRallies,           // false in local mode: one screen picks rarity instead
     phase: lfg ? "lfg" : "achievements", // online rooms gather in LFG first
@@ -107,6 +109,8 @@ export function migrateRoom(saved) {
   if (typeof saved.tacticRallies !== "boolean") room.tacticRallies = true;
   if (!saved.phase) room.phase = (room.boss || room.bossLog.length) ? "encounters" : "achievements";
   if (room.phase !== "lfg" || !saved.raidStart) room.raidStart = null;
+  room.raidName = cleanRaidName(saved.raidName);
+  room.raidDate = cleanRaidDate(saved.raidDate);
   return room;
 }
 
@@ -120,6 +124,27 @@ function migrateTactics(boss) {
     const base = t.rarityFrom || t.rarity;
     return { ...t, proposedById: null, rallies: [], base, override: t.rarityFrom ? t.rarity : null, legacy: true };
   });
+}
+
+/* ---------------- Raid details ---------------- */
+
+const cleanRaidName = (value) => String(value ?? "").trim().slice(0, LIMITS.raidName);
+
+// A real calendar day as "YYYY-MM-DD" (so not 2026-02-30), otherwise null.
+export function cleanRaidDate(value) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value ?? ""));
+  if (!m) return null;
+  const [y, mo, d] = [+m[1], +m[2], +m[3]];
+  const day = new Date(Date.UTC(y, mo - 1, d));
+  return day.getUTCFullYear() === y && day.getUTCMonth() === mo - 1 && day.getUTCDate() === d ? m[0] : null;
+}
+
+// Single-screen rooms are all called LOCAL, which says nothing as a name.
+const roomLabel = (room) => (room.code === "LOCAL" ? "Single screen" : `Room ${room.code}`);
+
+// The name, or a fallback built from the room code.
+export function raidTitle(room) {
+  return room.raidName || (room.code === "LOCAL" ? "Single-screen raid" : `Raid ${room.code}`);
 }
 
 /* ---------------- Timers ---------------- */
@@ -375,6 +400,16 @@ const actions = {
     if (!PHASES.includes(msg.phase)) return err("Unknown phase.");
     if (msg.phase === room.phase) return OK;
     changePhase(room, msg.phase);
+    return OK;
+  },
+
+  // The raid's name and date: the host's to set until the raid ends.
+  setRaidDetails(room, actor, msg) {
+    if (!actor.facilitator) return err("Only the host can change the raid details.");
+    const name = text(msg.raidName, LIMITS.raidName, "the raid name");
+    if (name.error) return name;
+    room.raidName = name.value;
+    room.raidDate = cleanRaidDate(msg.raidDate);
     return OK;
   },
 
@@ -916,6 +951,9 @@ export function viewFor(room, viewer, now, { revealChoices = false } = {}) {
     type: "state",
     room: room.code,
     persist: room.persist,
+    raidName: room.raidName,
+    raidDate: room.raidDate,
+    raidTitle: raidTitle(room),
     phase: room.phase,
     phaseTimer: timerView(room.phaseTimer, now),
     raidStart: timerView(room.raidStart, now),
@@ -1092,7 +1130,8 @@ const rarityText = (item) => {
 export function buildLedger(room) {
   const summary = buildSummary(room);
   // Plain language for sharing outside the retro: tactics are "actions".
-  const out = ["# Retro Action Plan"];
+  // the date stays ISO here: only the client formats dates for display
+  const out = [`# ${raidTitle(room)}`, "", [room.raidDate, roomLabel(room)].filter(Boolean).join(" · ")];
 
   if (summary.achievements.length) {
     out.push("", "## Achievements");

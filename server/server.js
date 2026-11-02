@@ -163,7 +163,10 @@ function isFacilitator(room, client) {
 const handlers = {
   // Create a brand-new room; the sender becomes the facilitator.
   create(ws, client, msg) {
-    const room = createRoom({ code: makeRoomCode(), persist: msg.persist === true, lfg: true });
+    const room = createRoom({
+      code: makeRoomCode(), persist: msg.persist === true, lfg: true,
+      raidName: msg.raidName, raidDate: msg.raidDate,
+    });
     room.facilitatorId = null;
     room.clients = new Map();
     rooms.set(room.code, room);

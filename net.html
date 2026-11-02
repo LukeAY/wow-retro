@@ -20,10 +20,11 @@
       </div>
 
       <div id="room-chip" class="room-chip hidden">
-        <p class="room-id">
-          <span class="room-label" aria-hidden="true">Room</span>
-          <span class="sr-only">Room </span><span id="room-code" class="room-code"></span>
-        </p>
+        <span class="raid-divider" aria-hidden="true"></span>
+        <div class="raid-id">
+          <p id="raid-title" class="raid-title"></p>
+          <p class="raid-meta"><span id="raid-date" class="raid-date"></span><span id="raid-date-sep" class="raid-sep" aria-hidden="true"> &middot; </span><span class="room-label">Room </span><span id="room-code" class="room-code"></span></p>
+        </div>
         <button id="btn-copy-invite" class="btn btn-ghost room-copy hidden">
           <span data-icon="link"></span><span class="room-copy-label">Copy invite</span><span class="sr-only room-copy-tail"> link</span>
         </button>
@@ -83,6 +84,7 @@
               <label class="you-item you-check"><input type="checkbox" id="keep-session" /> <span>Keep after the tab closes</span></label>
             </li>
             <li><button class="you-item" id="btn-edit-char" data-tool="edit">Edit my character</button></li>
+            <li><button class="you-item" id="btn-edit-raid" data-tool="raid">Edit raid details</button></li>
             <li><button class="you-item" data-tool="howto">How to play</button></li>
             <li class="you-divider" aria-hidden="true"></li>
             <li><button class="you-item you-danger" id="btn-leave" data-tool="leave">Leave group</button></li>
@@ -129,7 +131,17 @@
           Lead a new raid <span class="lobby-chevron" aria-hidden="true">&#9662;</span>
         </button>
         <div id="lobby-lead" class="lobby-lead hidden">
-          <p>You'll be the facilitator. You'll get a room code and link to share with your team.</p>
+          <h3 class="raid-details-heading">Raid details</h3>
+          <p class="raid-details-intro">You'll be the facilitator. Both are optional and you can change them later.</p>
+          <label for="create-raid-name" class="field-label lobby-label">Raid name <span class="field-note">(optional)</span></label>
+          <input id="create-raid-name" class="field raid-field" type="text" maxlength="60" placeholder="e.g. Sprint 42 Retro" autocomplete="off" aria-describedby="create-raid-name-hint" />
+          <p id="create-raid-name-hint" class="lobby-hint">Shown to the party, on the Raid Summary and in the Loot Ledger. Blank: &ldquo;Raid &lt;CODE&gt;&rdquo;.</p>
+          <label for="create-raid-date" class="field-label lobby-label">Retro date</label>
+          <div class="date-row">
+            <input id="create-raid-date" class="field raid-date-input" type="date" aria-describedby="create-raid-date-text" />
+            <button type="button" class="btn btn-ghost date-today" data-today="#create-raid-date">Today</button>
+          </div>
+          <p id="create-raid-date-text" class="date-written"></p>
           <label class="check-row lobby-check">
             <input type="checkbox" id="create-persist" aria-describedby="create-persist-hint" />
             <span>Save this room</span>
@@ -198,8 +210,12 @@
       <!-- After End Raid: the read-only recap, on everyone's screen -->
       <section id="raid-summary" class="card raid-summary hidden" aria-labelledby="summary-title">
         <div class="section-head">
-          <h2 id="summary-title" tabindex="-1">Raid Summary</h2>
+          <h2 id="summary-title" tabindex="-1">
+            <span class="summary-kicker">Raid Summary<span class="sr-only">:</span></span>
+            <span id="summary-raid-title" class="summary-raid-title"></span>
+          </h2>
         </div>
+        <p id="summary-meta" class="summary-meta"></p>
         <p class="muted">The raid has ended. This is a read-only recap of the whole session.</p>
         <div class="summary-export">
           <button id="btn-summary-export" class="btn btn-primary">Export Loot Ledger</button>
@@ -213,8 +229,9 @@
       <section id="phase-lfg" class="card phase-panel hidden" aria-labelledby="lfg-title">
         <div class="section-head">
           <h2 id="lfg-title">Looking for Group</h2>
-          <span id="lfg-count" class="muted"></span>
         </div>
+        <p id="lfg-raid-title" class="lfg-raid-title"></p>
+        <p id="lfg-meta" class="lfg-meta muted"></p>
         <div class="lfg-queue">
           <div class="lfg-eye" aria-hidden="true">
             <span class="lfg-ripple"></span><span class="lfg-ripple"></span>
@@ -456,7 +473,7 @@
         <h3 id="howto-title">How to play</h3>
         <button class="modal-close" data-close aria-label="Close">&times;</button>
       </div>
-      <p>Loot Council runs a team retro like a dungeon. The facilitator creates a room and shares the code; everyone else joins on their own laptop and makes a character.</p>
+      <p>Loot Council runs a team retro like a dungeon. The facilitator creates a room (optionally giving the raid a name and date, which they can change later) and shares the code; everyone else joins on their own laptop and makes a character.</p>
       <ol class="howto-steps">
         <li><b>Looking for Group.</b> Wait while the party gathers: everyone appears as they join. When the facilitator starts the raid, everyone sees <b>Group Found</b> with a 5-second countdown into Achievements; the facilitator can enter now or wait for more. (Single-screen mode skips this step.)</li>
         <li><b>Achievements.</b> Post what went well, and rally behind each other's wins to raise their rarity.</li>
@@ -466,6 +483,30 @@
       </ol>
       <p>When you're done, the facilitator ends the raid and everyone sees the Raid Summary. Export the Loot Ledger to keep the action plan.</p>
       <p class="muted">No laptops to go round? Use single-screen mode and pass one screen around the table.</p>
+    </div>
+  </div>
+
+  <!-- Raid details (host): name and date, until the raid ends -->
+  <div id="modal-raid" class="modal hidden">
+    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="raid-edit-title">
+      <div class="modal-head">
+        <h3 id="raid-edit-title">Edit raid details</h3>
+        <button class="modal-close" data-close aria-label="Close">&times;</button>
+      </div>
+      <label for="edit-raid-name" class="field-label">Raid name <span class="field-note">(optional)</span></label>
+      <input id="edit-raid-name" class="field raid-field" type="text" maxlength="60" placeholder="e.g. Sprint 42 Retro" autocomplete="off" aria-describedby="edit-raid-count" />
+      <p id="edit-raid-count" class="char-count"></p>
+      <label for="edit-raid-date" class="field-label">Retro date</label>
+      <div class="date-row">
+        <input id="edit-raid-date" class="field raid-date-input" type="date" aria-describedby="edit-raid-date-text" />
+        <button type="button" class="btn btn-ghost date-today" data-today="#edit-raid-date">Today</button>
+      </div>
+      <p id="edit-raid-date-text" class="date-written"></p>
+      <p class="raid-edit-note">Everyone in the party sees changes straight away. Locked once you end the raid.</p>
+      <div class="form-actions">
+        <button id="btn-raid-cancel" class="btn btn-ghost" data-close>Cancel</button>
+        <button id="btn-raid-save" class="btn btn-primary">Save details</button>
+      </div>
     </div>
   </div>
 
