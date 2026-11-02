@@ -420,6 +420,15 @@ setInterval(() => { if (view) updateTimers(); }, 1000);
 const ROUTE = [...PHASES.filter((p) => p !== "lfg"), "summary"];
 let gfReturn = null; // what had focus before Group Found opened
 
+// Played once each time the host starts the raid. Browsers only allow sound
+// after the viewer has interacted with the page, so a refused play is ignored.
+const inviteAccept = new Audio("shared/InviteAccept.ogg");
+inviteAccept.preload = "auto";
+function playInviteAccept() {
+  inviteAccept.currentTime = 0;
+  inviteAccept.play().catch(() => {});
+}
+
 function renderGroupFound() {
   const t = view.raidStart;
   if (t) timers.raidStart = { deadline: performance.now() + t.remainingMs, paused: t.paused, remainingMs: t.remainingMs, durationMs: t.durationMs };
@@ -447,6 +456,9 @@ function renderGroupFound() {
   $("#gf-wait").classList.toggle("hidden", host);
   if (wasOpen) { updateTimers(); return; }
 
+  // Only when this screen saw the countdown start (Start the Raid), not when
+  // someone joins or reconnects partway through one.
+  if (prevView && !prevView.raidStart) playInviteAccept();
   closeModals(); // any other dialog gives way
   setYouPanel(false);
   gfReturn = document.activeElement;
