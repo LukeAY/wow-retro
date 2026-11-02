@@ -10,10 +10,12 @@ import {
   RARITIES, RARITY, TACTIC_DAMAGE, rarityRank, tierLabel, BOSS_STATUS,
   RALLY_EPIC, RALLY_LEGENDARY, TEAM_ACTION_BUDGET, MIN_BAG_SLOTS, TACTIC_RALLY_UNCOMMON, TACTIC_RALLY_LEGENDARY, RACE_CLASSES, FACTION, CLASS_NAMES, BOSS_TIERS, tierForThreat,
 } from "./shared/rules.js";
-import { PHASES, PHASE_LABEL } from "./shared/engine.js";
+import { PHASES as ALL_PHASES, PHASE_LABEL } from "./shared/engine.js";
 import { icon, svgIcon, ICON_PATHS, raceIcon, classIcon, factionIcon } from "./icons.js";
 
 const LOCAL = new URLSearchParams(location.search).get("mode") === "local";
+// Single-screen mode has no one to wait for, so it skips Looking for Group.
+const PHASES = LOCAL ? ALL_PHASES.filter((p) => p !== "lfg") : ALL_PHASES;
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
 
@@ -191,7 +193,10 @@ function render() {
     return;
   }
   renderPhaseBar();
-  for (const p of PHASES) $(`#phase-${p}`).classList.toggle("hidden", view.phase !== p);
+  for (const p of ALL_PHASES) $(`#phase-${p}`).classList.toggle("hidden", view.phase !== p);
+  // while the party gathers there's nothing to show in the party, quest or loot logs
+  $("#game").classList.toggle("in-lfg", view.phase === "lfg");
+  if (view.phase === "lfg") renderLfg();
   if (view.phase === "achievements") renderAchievements();
   if (view.phase === "scouting") renderMobList("#scout-mob-list", false);
   if (view.phase === "voting") renderVoting();
@@ -232,7 +237,7 @@ function renderTopbar(inGame) {
   // everyday tools, shown by phase and role as before
   $("#bar-tools").classList.toggle("hidden", !inGame);
   const tools = {
-    mobs: inGame && !ended && view.phase !== "achievements",
+    mobs: inGame && !ended && view.phase !== "lfg" && view.phase !== "achievements",
     roster: inGame && host && !(ended && LOCAL), // online the host can still kick or hand over after the end
     export: inGame,
     config: inGame && !ended && host,
@@ -295,8 +300,9 @@ function setSaveTip(open) {
 /* ----- phase tracker ----- */
 
 const TRACK = [...PHASES, "summary"];
-const TRACK_LABEL = { achievements: "Achievements", scouting: "Scout", voting: "Threat", encounters: "Bosses", summary: "Summary" };
+const TRACK_LABEL = { lfg: "LFG", achievements: "Achievements", scouting: "Scout", voting: "Threat", encounters: "Bosses", summary: "Summary" };
 const PHASE_HINT = {
+  lfg: "Gather the party: the host starts the raid once everyone's here",
   achievements: "Post what went well and rally behind each other's wins",
   scouting: "Add the topics you want to discuss",
   voting: "Spread your threat across the topics, in secret",
@@ -325,6 +331,7 @@ function renderTracker(inGame) {
 /* ----- phase bar and timers ----- */
 
 const NEXT_LABEL = {
+  lfg: "Start the Raid",
   achievements: "Close Achievements",
   scouting: "Start Threat Voting",
   voting: "Start Boss Encounters",
@@ -394,6 +401,40 @@ function updateTimers() {
   }
 }
 setInterval(() => { if (view) updateTimers(); }, 1000);
+
+/* ----- Looking for Group (online only) ----- */
+// A holding page while the party gathers: who's here, live, and (for the
+// host) the invite link. Nothing can be posted until the host starts the raid.
+
+const lfgTag = (m) => m.claimed && m.connected ? ["ready", "Ready"]
+  : m.held ? ["away", "Away"] : m.proxy ? ["proxy", "Proxy"] : ["open", "Open"];
+
+function renderLfg() {
+  const host = isHost();
+  const ready = view.members.filter((m) => m.claimed && m.connected);
+  setText($("#lfg-count"), `${plural(ready.length, "hero", "heroes")} ready`);
+  setText($("#lfg-status"), host ? "Your party is forming" : "Waiting for the raid to start…");
+  setText($("#lfg-sub"), host
+    ? `Share the invite link or room code ${view.room}. Start the Raid when everyone's here.`
+    : "The host starts the raid once everyone's here. Achievements open then.");
+  $("#btn-lfg-invite").classList.toggle("hidden", !host);
+  // ready players first, otherwise in the order they joined
+  const roster = [...ready, ...view.members.filter((m) => !ready.includes(m))];
+  setHtml($("#lfg-roster"), roster.map((m) => {
+    const [state, label] = lfgTag(m);
+    const crest = m.faction
+      ? `<span class="faction-crest crest-${m.faction.toLowerCase()}">${factionIcon(m.faction)}<span class="sr-only">${m.faction}</span></span>` : "";
+    return `<li class="lfg-hero lfg-${state}" style="--member-color:${CLASS_COLORS[m.cls] || "#c8aa6e"}">
+        <div class="member-avatar" aria-hidden="true">${raceIcon(m.race) || escapeHtml(m.name.slice(0, 2).toUpperCase())}</div>
+        <div class="member-headtext">
+          <h3 class="member-name">${crest}${escapeHtml(m.name)}${m.isHost ? hostCrown() : ""}${view.you.memberId === m.id ? youStar() : ""}</h3>
+          <div class="member-class">${escapeHtml(`${m.race} ${m.cls}`)}</div>
+          ${m.realName ? `<div class="member-real">${icon("person")} ${escapeHtml(m.realName)}</div>` : ""}
+        </div>
+        <span class="lfg-tag lfg-tag-${state}">${label}</span>
+      </li>`;
+  }).join("") + `<li class="lfg-hero lfg-empty" aria-hidden="true"><span class="lfg-empty-ring"></span>Looking for more…</li>`);
+}
 
 /* ----- achievements ----- */
 
@@ -1074,12 +1115,20 @@ function announceChanges() {
     return;
   }
   if (view.ended) return;
-  if (prev.bagSize !== view.bagSize && view.members.length) {
+  // bag size changes on every join while the party gathers: no toast for that
+  if (prev.bagSize !== view.bagSize && view.members.length && view.phase !== "lfg") {
     toast({ kind: "neutral", iconName: "lootbag", heading: "Bag size changed", title: `Bags now hold ${view.bagSize}`,
       lines: [`Party of ${view.partySize}: ${TEAM_ACTION_BUDGET} actions shared, at least ${MIN_BAG_SLOTS} each.`], life: 4500 });
   }
-  if (prev.phase !== view.phase) {
+  if (prev.phase === "lfg" && view.phase !== "lfg") {
+    toast({ kind: "epic", iconName: "swords", heading: "The raid has begun!", title: PHASE_LABEL[view.phase], life: 5000 });
+  } else if (prev.phase !== view.phase) {
     toast({ kind: "neutral", iconName: "flag", heading: "New phase", title: PHASE_LABEL[view.phase], life: 3500 });
+  }
+  if (view.phase === "lfg") {
+    for (const m of view.members) {
+      if (m.id !== view.you.memberId && !prev.members.some((x) => x.id === m.id)) announce(`${m.name} joined the group.`);
+    }
   }
   for (const a of view.achievements) {
     const before = prev.achievements.find((x) => x.id === a.id);
@@ -1439,20 +1488,31 @@ async function copyText(text) {
   return ok;
 }
 
+// Returns whether the link reached the clipboard; if not, shows it to copy by hand.
+async function copyInvite() {
+  const link = inviteLink(view.room);
+  if (await copyText(link)) { announce("Invite link copied"); return true; }
+  // last resort: show the link, selected, for copying by hand
+  $("#invite-link").value = link;
+  openModal("#modal-invite");
+  $("#invite-link").select();
+  return false;
+}
 $("#btn-copy-invite").addEventListener("click", async () => {
   const label = $("#btn-copy-invite .room-copy-label");
   const tail = $("#btn-copy-invite .room-copy-tail");
-  const link = inviteLink(view.room);
-  if (await copyText(link)) {
+  if (await copyInvite()) {
     label.textContent = "Link copied"; tail.textContent = "";
-    announce("Invite link copied");
     clearTimeout(label._reset);
     label._reset = setTimeout(() => { label.textContent = "Copy invite"; tail.textContent = " link"; }, 2000);
-  } else {
-    // last resort: show the link, selected, for copying by hand
-    $("#invite-link").value = link;
-    openModal("#modal-invite");
-    $("#invite-link").select();
+  }
+});
+$("#btn-lfg-invite").addEventListener("click", async () => {
+  const btn = $("#btn-lfg-invite");
+  if (await copyInvite()) {
+    btn.textContent = "Link copied";
+    clearTimeout(btn._reset);
+    btn._reset = setTimeout(() => { btn.textContent = "Copy invite link"; }, 2000);
   }
 });
 

@@ -22,8 +22,9 @@ import {
 
 /* ---------------- Phases ---------------- */
 
-export const PHASES = ["achievements", "scouting", "voting", "encounters"];
+export const PHASES = ["lfg", "achievements", "scouting", "voting", "encounters"];
 export const PHASE_LABEL = {
+  lfg: "Looking for Group",
   achievements: "Achievements",
   scouting: "Scouting",
   voting: "Threat Voting",
@@ -32,12 +33,12 @@ export const PHASE_LABEL = {
 
 /* ---------------- Room shape ---------------- */
 
-export function createRoom({ code, persist = false, tacticRallies = true, now = Date.now() }) {
+export function createRoom({ code, persist = false, tacticRallies = true, lfg = false, now = Date.now() }) {
   return {
     code,
     persist,                 // saved rooms survive a server restart
     tacticRallies,           // false in local mode: one screen picks rarity instead
-    phase: "achievements",
+    phase: lfg ? "lfg" : "achievements", // online rooms gather in LFG first
     phaseTimer: null,        // optional countdown for the current phase
     members: [],             // [{ id, name, realName, cls, race, proxy, held }]
     achievements: [],        // [{ id, title, detail, posters[], rallies[], rarity }]
@@ -469,7 +470,7 @@ const actions = {
   /* ----- scouting ----- */
 
   addMob(room, actor, msg, ctx) {
-    if (room.phase === "achievements") return err("Scouting hasn't opened yet.");
+    if (PHASES.indexOf(room.phase) < PHASES.indexOf("scouting")) return err("Scouting hasn't opened yet.");
     const me = findMember(room, actor.memberId);
     if (!me && !actor.facilitator) return err("Create a character before scouting topics.");
     const name = text(msg.name, LIMITS.topicName, "the topic (boss name)", true);

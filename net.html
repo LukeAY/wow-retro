@@ -209,6 +209,26 @@
         <div id="summary-body"></div>
       </section>
 
+      <!-- 0. Looking for Group (online only): the party gathers before the raid -->
+      <section id="phase-lfg" class="card phase-panel hidden" aria-labelledby="lfg-title">
+        <div class="section-head">
+          <h2 id="lfg-title">Looking for Group</h2>
+          <span id="lfg-count" class="muted"></span>
+        </div>
+        <div class="lfg-queue">
+          <div class="lfg-eye" aria-hidden="true">
+            <span class="lfg-ripple"></span><span class="lfg-ripple"></span>
+            <span class="lfg-orb"></span>
+          </div>
+          <div class="lfg-queue-text">
+            <p id="lfg-status" class="lfg-status"></p>
+            <p id="lfg-sub" class="muted"></p>
+            <button id="btn-lfg-invite" class="btn btn-primary hidden">Copy invite link</button>
+          </div>
+        </div>
+        <ul id="lfg-roster" class="lfg-roster" aria-label="Party"></ul>
+      </section>
+
       <!-- 1. Achievements -->
       <section id="phase-achievements" class="card phase-panel hidden" aria-labelledby="ach-title">
         <div class="section-head">
@@ -438,6 +458,7 @@
       </div>
       <p>Loot Council runs a team retro like a dungeon. The facilitator creates a room and shares the code; everyone else joins on their own laptop and makes a character.</p>
       <ol class="howto-steps">
+        <li><b>Looking for Group.</b> Wait while the party gathers: everyone appears as they join. The facilitator starts the raid once everyone's here. (Single-screen mode skips this step.)</li>
         <li><b>Achievements.</b> Post what went well, and rally behind each other's wins to raise their rarity.</li>
         <li><b>Scouting.</b> Add the problems you want to talk about to the Mob List.</li>
         <li><b>Threat Voting.</b> Spread 3 threat across the topics, in secret. The most threatening become bosses.</li>
