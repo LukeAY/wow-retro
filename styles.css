@@ -1666,7 +1666,8 @@ textarea.field { width: 100%; resize: vertical; }
   box-shadow: var(--frame);
 }
 .lfg-hero .member-headtext { flex: 1; min-width: 0; }
-.lfg-hero:not(.lfg-ready):not(.lfg-empty) { opacity: .7; }
+/* not here right now: grey the portrait only, so the text keeps its contrast */
+.lfg-hero:not(.lfg-ready):not(.lfg-empty) .member-avatar { filter: grayscale(1) brightness(.75); }
 .lfg-tag {
   flex-shrink: 0;
   align-self: flex-start;
