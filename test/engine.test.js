@@ -684,3 +684,43 @@ test("remediation steps migrate to tactics, keeping their picked rarity", () => 
   assert.match(ledger, /^# Retro Action Plan/);
   assert.match(ledger, /Host changed — Epic \(changed from Common\) — owner: Ana R \(Ana\)/);
 });
+
+/* ---------------- Looking for Group ---------------- */
+
+function lfgSetup() {
+  let n = 0;
+  const ctx = { uuid: () => `id${++n}`, rollD: () => 50, rand: () => 0, now: 0 };
+  const room = createRoom({ code: "LFG1", lfg: true, now: 0 });
+  const [ana, ben] = ["Ana", "Ben"].map((name) => addMember(room, { name, realName: `${name} R`, race: "Human", cls: "Warrior" }, ctx.uuid));
+  const host = { memberId: ana.id, facilitator: true };
+  const player = { memberId: ben.id, facilitator: false };
+  return { room, ctx, host, player };
+}
+
+test("an online room starts in Looking for Group, where nothing can be posted", () => {
+  const { room, ctx, host, player } = lfgSetup();
+  assert.equal(room.phase, "lfg");
+  assert.equal(viewFor(room, player, 0).phase, "lfg");
+  for (const actor of [host, player]) {
+    assert.match(act(room, actor, { type: "postAchievement", title: "Too early" }, ctx).error, /closed/);
+    assert.match(act(room, actor, { type: "addMob", name: "Too early" }, ctx).error, /hasn't opened/);
+  }
+  assert.equal(room.achievements.length, 0);
+  assert.equal(room.mobList.length, 0);
+});
+
+test("only the host can start the raid from Looking for Group, and then posting opens", () => {
+  const { room, ctx, host, player } = lfgSetup();
+  assert.match(act(room, player, { type: "setPhase", phase: "achievements" }, ctx).error, /Only the host/);
+  assert.equal(room.phase, "lfg");
+  assert.ok(act(room, host, { type: "setPhase", phase: "achievements" }, ctx).ok);
+  assert.equal(room.phase, "achievements");
+  assert.ok(act(room, player, { type: "postAchievement", title: "Shipped it" }, ctx).ok);
+  assert.equal(room.achievements.length, 1);
+});
+
+test("local rooms and rooms saved before LFG don't start in Looking for Group", () => {
+  assert.equal(createRoom({ code: "LOCAL", tacticRallies: false }).phase, "achievements");
+  assert.equal(migrateRoom({ code: "OLD6", members: [], log: [] }).phase, "achievements");
+  assert.equal(migrateRoom({ code: "OLD7", phase: "scouting", members: [], log: [] }).phase, "scouting");
+});

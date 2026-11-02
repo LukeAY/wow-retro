@@ -2,6 +2,8 @@
 
 A World of Warcraft themed retro tool. A session runs like a dungeon:
 
+0. **Looking for Group** (online only) — the party gathers on a holding page
+   until the facilitator starts the raid.
 1. **Achievements** — celebrate what went well, and rally behind each other's wins.
 2. **Scouting** — everyone adds the topics they want to discuss to a shared **Mob List**.
 3. **Threat Voting** — everyone spreads threat across the topics, in secret.
@@ -70,7 +72,15 @@ The lobby puts joining first: most people arrive with a code or a link.
    Then they create a character: a character name, their **real name** (who's
    accountable for loot they win), then a faction, a race from that faction
    and a class that race can be.
-4. The facilitator moves the session through its phases with **Back** /
+4. Everyone then lands in **Looking for Group**, a holding page that shows
+   the party live as people join: each hero's race, class, faction, real name
+   and whether they're **Ready** (connected), **Away**, a **Proxy** or an
+   **Open** slot. The facilitator also gets a **Copy invite link** button
+   there. Nothing can be posted yet: no achievements, no Mob List topics.
+   Only the facilitator can leave LFG, with **Start the Raid**, which opens
+   Achievements for everyone. Anyone joining after that goes straight into
+   the current phase.
+5. The facilitator moves the session through its phases with **Back** /
    **Next** in the row under the phase tracker (with the optional phase timer).
    Everyone sees the current phase.
 
@@ -86,14 +96,14 @@ Once you're in a room, the header is a slim bar with a phase tracker under it:
 - **Status** — **Connected** / **Connecting…** / **Disconnected** (it
   reconnects by itself), and **Saved** / **Not saved**. Select the save status
   for what it means.
-- **Tools** — **Mob List** (after Achievements), **Party** (facilitator) and
+- **Tools** — **Mob List** (after LFG and Achievements), **Party** (facilitator) and
   **Loot Ledger**.
 - **Your character** — your avatar, name and "Real name · Race Class" (plus
   "Facilitator" for the host). It opens a menu with **Loot Table**
   (facilitator), **Edit my character**, **How to play** and **Leave group**.
   Edit my character reopens the character screen, prefilled; your loot stays
   with you.
-- **Phase tracker** — Achievements › Scout › Threat › Bosses › Summary, with
+- **Phase tracker** — LFG › Achievements › Scout › Threat › Bosses › Summary, with
   done phases ticked, the current one outlined, and a one-line hint for what
   to do now.
 
@@ -158,6 +168,8 @@ you're acting as.
 
 - **Threat ballots stay private** by passing the screen around: each person
   selects their name, opens their ballot, votes, then hides it again.
+- There's no **Looking for Group** phase: the session opens straight on
+  Achievements, and the tracker starts there.
 - **Need / Greed / Pass** buttons appear on every party panel.
 - There are no tactic rallies (nobody else is at their own screen to rally),
   so whoever proposes a tactic picks its rarity instead.

@@ -1572,3 +1572,129 @@ textarea.field { width: 100%; resize: vertical; }
   background: repeating-linear-gradient(135deg, #3a2a20 0 8px, #2a1d16 8px 16px);
 }
 .engage-hint { align-self: center; font-size: 0.8125rem; color: var(--muted); }
+
+/* ---------- Looking for Group (online only) ---------- */
+/* While the party gathers, the party grid, quest log and loot log are empty
+   noise: the LFG roster stands in for them. */
+#game.in-lfg .party, #game.in-lfg .accountability, #game.in-lfg .loot-log { display: none; }
+
+.lfg-queue {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 18px 20px;
+  margin-bottom: 20px;
+  border: 1px solid var(--frame-edge);
+  border-radius: 4px;
+  background:
+    radial-gradient(70% 140% at 0% 50%, color-mix(in srgb, var(--rare) 14%, transparent), transparent 70%),
+    var(--bg-2);
+  box-shadow: var(--frame), inset 0 0 30px -18px var(--rare);
+}
+.lfg-queue-text { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; }
+.lfg-queue-text p { margin: 0; }
+.lfg-status {
+  font-family: "Cinzel", Georgia, serif;
+  font-weight: 700;
+  font-size: 1.125rem;
+  color: var(--wow-yellow);
+  text-shadow: 0 1px 2px #000;
+}
+.lfg-queue-text .btn { margin-top: 6px; }
+
+/* the LFG "eye": a pulsing blue orb in a gilded ring, rippling outwards */
+.lfg-eye {
+  position: relative;
+  width: 72px; height: 72px;
+  flex-shrink: 0;
+  display: grid; place-items: center;
+}
+.lfg-orb {
+  position: relative;
+  width: 60px; height: 60px;
+  border-radius: 50%;
+  border: 2px solid #000;
+  background:
+    radial-gradient(circle at 50% 50%, #fff 0 4px, transparent 5px),
+    radial-gradient(ellipse 60% 35% at 50% 50%, #9fd4ff 0 30%, transparent 32%),
+    radial-gradient(circle at 40% 30%, #6fc1ff, #1d5fb8 55%, #0a1f45 100%);
+  box-shadow: 0 0 0 3px #b8913f, 0 0 0 4px #3a2a14, 0 0 0 5px #000,
+    inset 0 -8px 14px rgba(0,0,0,.5), 0 0 18px -2px var(--rare);
+  animation: lfgPulse 2.4s ease-in-out infinite;
+}
+.lfg-ripple {
+  position: absolute;
+  inset: 6px;
+  border-radius: 50%;
+  border: 2px solid var(--rare);
+  opacity: 0;
+  animation: lfgRipple 2.4s ease-out infinite;
+}
+.lfg-ripple + .lfg-ripple { animation-delay: 1.2s; }
+@keyframes lfgPulse {
+  0%, 100% { filter: brightness(1); box-shadow: 0 0 0 3px #b8913f, 0 0 0 4px #3a2a14, 0 0 0 5px #000, inset 0 -8px 14px rgba(0,0,0,.5), 0 0 14px -4px var(--rare); }
+  50% { filter: brightness(1.25); box-shadow: 0 0 0 3px #b8913f, 0 0 0 4px #3a2a14, 0 0 0 5px #000, inset 0 -8px 14px rgba(0,0,0,.5), 0 0 28px 2px var(--rare); }
+}
+@keyframes lfgRipple {
+  0% { transform: scale(.9); opacity: .8; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lfg-orb { animation: none; }
+  .lfg-ripple { display: none; }
+}
+
+/* the roster: one hero card per party member, then an open slot */
+.lfg-roster {
+  list-style: none; margin: 0; padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+.lfg-hero {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  min-width: 0;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--member-color, var(--gold)) 10%, transparent), transparent 70%),
+    var(--panel);
+  border: 1px solid var(--frame-edge);
+  border-left: 3px solid var(--member-color, var(--gold));
+  border-radius: 2px;
+  box-shadow: var(--frame);
+}
+.lfg-hero .member-headtext { flex: 1; min-width: 0; }
+.lfg-hero:not(.lfg-ready):not(.lfg-empty) { opacity: .7; }
+.lfg-tag {
+  flex-shrink: 0;
+  align-self: flex-start;
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  padding: 2px 8px;
+  border-radius: 3px;
+  border: 1px solid var(--field-border);
+  color: var(--muted);
+}
+.lfg-tag-ready { color: var(--uncommon); border-color: color-mix(in srgb, var(--uncommon) 60%, transparent); }
+.lfg-empty {
+  justify-content: center;
+  min-height: 72px;
+  color: var(--muted);
+  font-style: italic;
+  background: transparent;
+  border: 1px dashed var(--field-border);
+  box-shadow: none;
+}
+.lfg-empty-ring {
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  border: 2px dashed var(--muted);
+}
+@media (max-width: 640px) {
+  .lfg-queue { flex-direction: column; text-align: center; gap: 16px; padding: 16px; }
+  .lfg-queue-text { align-items: center; }
+  .lfg-roster { grid-template-columns: 1fr; }
+}
